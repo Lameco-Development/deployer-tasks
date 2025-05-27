@@ -4,7 +4,6 @@ namespace Deployer;
 
 desc('Download remote database and import locally');
 task('lameco:db_download', function () {
-    // === Remote: create dump ===
     within('{{deploy_path}}/shared', function () {
         writeln('Reading remote .env...');
         $remoteEnvContent = run('cat .env');
@@ -34,7 +33,6 @@ task('lameco:db_download', function () {
         run('rm ' . $remotePath);
     });
 
-    // === Local: import the dump ===
     $dumpFile = get('dump_file');
     $dumpDir = get('lameco_dump_dir');
     $localPath = $dumpDir . '/' . $dumpFile;
@@ -137,15 +135,39 @@ task('lameco:load', function () {
     writeln('Public directory: ' . $publicDir);
 });
 
+desc('Build assets locally using Yarn');
+task('lameco:build_assets', function () {
+    writeln('Installing nvm...');
+    runLocally('source $HOME/.nvm/nvm.sh && nvm install');
+
+    writeln('Installing dependencies...');
+    runLocally('corepack yarn install');
+
+    writeln('Building assets...');
+    runLocally('corepack yarn build');
+});
+
+// TODO: Add option to overrule the directory
+desc('Upload built assets to the host');
+task('lameco:upload_assets', function () {
+    writeln('Uploading built assets to remote...');
+    upload('web/dist/', '{{release_path}}/web/dist/', [
+        'options' => '--delete',
+        'exclude' => ['node_modules', '.git', 'yarn.lock', 'package.json']
+    ]);
+});
+
 before('lameco:db_download', 'lameco:load');
 before('lameco:db_credentials', 'lameco:load');
 before('lameco:download', 'lameco:load');
 before('lameco:upload', 'lameco:load');
+before('lameco:build_assets', 'lameco:load');
+before('lameco:upload_assets', 'lameco:load');
 
 /**
  * Parse .env content into associative array.
  */
-function fetchEnv($envContent)
+function fetchEnv($envContent): array
 {
     $env = [];
     foreach (explode("\n", $envContent) as $line) {
@@ -164,7 +186,7 @@ function fetchEnv($envContent)
  * Extract DB credentials from env array.
  * Supports DATABASE_URL (e.g. Symfony) and CRAFT_DB_* (e.g. Craft CMS).
  */
-function extractDbCredentials($env)
+function extractDbCredentials($env): array
 {
     if (!empty($env['DATABASE_URL'])) {
         if (preg_match('|mysql://([^:]+):([^@]+)@[^/]+/([^?]+)|', $env['DATABASE_URL'], $dbMatch)) {
