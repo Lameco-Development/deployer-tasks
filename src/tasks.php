@@ -162,6 +162,26 @@ task('lameco:upload_assets', function () {
     ]);
 });
 
+desc('Restart php-fpm service');
+task('lameco:restart_php', function () {
+    writeln('Restarting php-fpm service...');
+    run('sudo systemctl restart php-fpm-' . get('http_user') . '.service');
+});
+
+desc('Restart supervisor');
+task('lameco:restart_supervisor', function () {
+    writeln('Restarting supervisor...');
+
+    $supervisorConfigs = get('lameco_supervisor_configs', [
+        get('http_user') . '.conf',
+    ]);
+
+    foreach ($supervisorConfigs as $config) {
+        writeln('Restarting supervisor config: ' . $config);
+        run('supervisorctl -c /etc/projects/supervisor/' . $config . ' restart all');
+    }
+});
+
 before('lameco:db_download', 'lameco:load');
 before('lameco:db_credentials', 'lameco:load');
 before('lameco:download', 'lameco:load');
@@ -169,6 +189,9 @@ before('lameco:upload', 'lameco:load');
 
 before('deploy:symlink', 'lameco:build_assets');
 before('deploy:symlink', 'lameco:upload_assets');
+
+after('deploy:cleanup', 'lameco:restart_php');
+after('deploy:cleanup', 'lameco:restart_supervisor');
 
 /**
  * Parse .env content into associative array.
