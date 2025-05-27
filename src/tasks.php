@@ -6,7 +6,7 @@ desc('Download remote database and import locally');
 task('lameco:db_download', function () {
     // === Remote: create dump ===
     within('{{deploy_path}}/shared', function () {
-        writeln("Reading remote .env...");
+        writeln('Reading remote .env...');
         $remoteEnvContent = run('cat .env');
         $remoteEnv = fetchEnv($remoteEnvContent);
 
@@ -21,27 +21,27 @@ task('lameco:db_download', function () {
         $dumpFile = 'current_' . $remoteDatabaseName . '.sql.gz';
         set('dump_file', $dumpFile);
 
-        $remotePath = "~/{$dumpFile}";
-        $localPath = "{$dumpDir}/{$dumpFile}";
+        $remotePath = '~/' . $dumpFile;
+        $localPath = $dumpDir . '/' . $dumpFile;
 
-        writeln("Creating database dump...");
-        run("mysqldump --quick --single-transaction -u $remoteDatabaseUser -p$remoteDatabasePassword $remoteDatabaseName | gzip > $remotePath");
+        writeln('Creating database dump...');
+        run('mysqldump --quick --single-transaction -u ' . $remoteDatabaseUser . ' -p' . $remoteDatabasePassword . ' ' . $remoteDatabaseName . ' | gzip > ' . $remotePath);
 
-        writeln("Downloading database dump to local: $localPath");
+        writeln('Downloading database dump to local: ' . $localPath);
         download($remotePath, $localPath);
 
-        writeln("Removing remote database dump...");
-        run("rm $remotePath");
+        writeln('Removing remote database dump...');
+        run('rm ' . $remotePath);
     });
 
     // === Local: import the dump ===
     $dumpFile = get('dump_file');
     $dumpDir = get('lameco_dump_dir');
-    $localPath = "{$dumpDir}/{$dumpFile}";
+    $localPath = $dumpDir . '/' . $dumpFile;
 
-    writeln("Importing database from $localPath...");
+    writeln('Importing database from ' . $localPath . '...');
 
-    writeln("Reading local .env...");
+    writeln('Reading local .env...');
     $localEnvContent = file_get_contents('.env');
     $localEnv = fetchEnv($localEnvContent);
 
@@ -53,13 +53,13 @@ task('lameco:db_download', function () {
     }
 
     writeln('Creating local database if it does not exist...');
-    runLocally("mysql -u $localDatabaseUser -p$localDatabasePassword -e 'DROP DATABASE IF EXISTS $localDatabaseName; CREATE DATABASE $localDatabaseName;'");
+    runLocally('mysql -u ' . $localDatabaseUser . ' -p' . $localDatabasePassword . ' -e \'DROP DATABASE IF EXISTS ' . $localDatabaseName . '; CREATE DATABASE ' . $localDatabaseName . ';\'');
 
     writeln('Importing database dump...');
-    runLocally("gunzip -c $localPath | mysql -u $localDatabaseUser -p$localDatabasePassword $localDatabaseName");
+    runLocally('gunzip -c ' . $localPath . ' | mysql -u ' . $localDatabaseUser . ' -p' . $localDatabasePassword . ' ' . $localDatabaseName);
 
-    writeln("Removing local dump file...");
-    runLocally("rm $localPath");
+    writeln('Removing local dump file...');
+    runLocally('rm ' . $localPath);
 });
 
 desc('Download remote database credentials');
@@ -71,32 +71,32 @@ task('lameco:db_credentials', function () {
         [$remoteDatabaseUser, $remoteDatabasePassword] = extractDbCredentials($env);
 
         if (!isset($remoteDatabaseUser, $remoteDatabasePassword)) {
-            writeln("Remote database credentials could not be extracted.");
+            writeln('Remote database credentials could not be extracted.');
             return;
         }
 
-        writeln("Username: $remoteDatabaseUser");
-        writeln("Password: $remoteDatabasePassword");
+        writeln('Username: ' . $remoteDatabaseUser);
+        writeln('Password: ' . $remoteDatabasePassword);
     });
 });
 
 desc('Download files from remote to local');
 task('lameco:download', function () {
     $publicDir = get('lameco_public_dir');
-    $remotePath = "{{deploy_path}}/shared/{$publicDir}/uploads/";
-    $localPath = "{$publicDir}/uploads/";
+    $remotePath = '{{deploy_path}}/shared/' . $publicDir . '/uploads/';
+    $localPath = $publicDir . '/uploads/';
 
-    writeln("Downloading files from remote to local...");
+    writeln('Downloading files from remote to local...');
     download($remotePath, $localPath);
 });
 
 desc('Upload local files to remote');
 task('lameco:upload', function () {
     $publicDir = get('lameco_public_dir');
-    $remotePath = "{{deploy_path}}/shared/{$publicDir}/uploads/";
-    $localPath = "{$publicDir}/uploads/*";
+    $remotePath = '{{deploy_path}}/shared/' . $publicDir . '/uploads/';
+    $localPath = $publicDir . '/uploads/*';
 
-    writeln("Uploading files from local to remote...");
+    writeln('Uploading files from local to remote...');
     upload($localPath, $remotePath);
 });
 
