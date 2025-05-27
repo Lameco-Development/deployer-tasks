@@ -135,7 +135,7 @@ task('lameco:load', function () {
     writeln('Public directory: ' . $publicDir);
 });
 
-desc('Build assets locally using Yarn');
+desc('Build local assets');
 task('lameco:build_assets', function () {
     writeln('Installing nvm...');
     runLocally('source $HOME/.nvm/nvm.sh && nvm install');
@@ -147,12 +147,17 @@ task('lameco:build_assets', function () {
     runLocally('corepack yarn build');
 });
 
-// TODO: Add option to overrule the directory
-desc('Upload built assets to the host');
+desc('Upload built assets to remote');
 task('lameco:upload_assets', function () {
-    writeln('Uploading built assets to remote...');
-    upload('web/dist/', '{{release_path}}/web/dist/', [
-        'options' => '--delete',
+    // Get the source directory from configuration or use default
+    $sourceDir = get('lameco_assets_dir', 'web/dist/');
+
+    // Construct the destination path by prefixing the release_path to the source directory
+    $destDir = '{{release_path}}/' . $sourceDir;
+
+    writeln('Uploading built assets from ' . $sourceDir . ' to remote ' . $destDir . '...');
+    upload($sourceDir, $destDir, [
+        'options' => ['--delete'],
         'exclude' => ['node_modules', '.git', 'yarn.lock', 'package.json']
     ]);
 });
@@ -161,8 +166,9 @@ before('lameco:db_download', 'lameco:load');
 before('lameco:db_credentials', 'lameco:load');
 before('lameco:download', 'lameco:load');
 before('lameco:upload', 'lameco:load');
-before('lameco:build_assets', 'lameco:load');
-before('lameco:upload_assets', 'lameco:load');
+
+before('deploy:symlink', 'lameco:build_assets');
+before('deploy:symlink', 'lameco:upload_assets');
 
 /**
  * Parse .env content into associative array.
