@@ -1,0 +1,20 @@
+{
+    "name": "lameco/deployer-tasks",
+    "description": "Common tasks for Deployer",
+    "type": "library",
+    "authors": [
+        {
+            "name": "Laméco",
+            "homepage": "https://www.lameco.nl"
+        }
+    ],
+    "require": {
+        "php": "^8.4",
+        "deployer/deployer": "^7.0"
+    },
+    "autoload": {
+        "files": [
+            "src/tasks.php"
+        ]
+    }
+}
