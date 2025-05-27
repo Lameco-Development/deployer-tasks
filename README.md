@@ -111,18 +111,11 @@ Restarts supervisor.
 Include the tasks in your `deploy.php` file:
 
 ```php
-require 'vendor/autoload.php';
-
-// Configure your deployment
-set('repository', 'git@github.com:your/repository.git');
-// ... other configuration
+require 'vendor/lameco/deployer-tasks/src/tasks.php';
 
 // Override parameters if needed
 set('lameco_assets_dir', 'public/build/');
 set('lameco_supervisor_configs', ['app.conf', 'queue.conf']);
-
-// Use the tasks in your deployment workflow
-after('deploy:failed', 'deploy:unlock');
 ```
 
 ## License
