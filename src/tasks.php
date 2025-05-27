@@ -136,8 +136,7 @@ task('lameco:load', function () {
     // Set dump directory based on project type
     $dumpDir = match ($projectType) {
         'symfony' => 'var',
-        'craftcms' => 'storage',
-        'laravel' => 'storage',
+        'craftcms', 'laravel' => 'storage',
         default => ''
     };
     set('lameco_dump_dir', $dumpDir);
@@ -167,10 +166,8 @@ task('lameco:build_assets', function () {
 
 desc('Upload built assets to remote');
 task('lameco:upload_assets', function () {
-    // Get the source directory from configuration or use default
     $sourceDir = get('lameco_assets_dir', 'web/dist/');
 
-    // Construct the destination path by prefixing the release_path to the source directory
     $destDir = '{{release_path}}/' . $sourceDir;
 
     writeln('Uploading built assets from ' . $sourceDir . ' to remote ' . $destDir . '...');
@@ -206,7 +203,7 @@ before('lameco:download', 'lameco:load');
 before('lameco:upload', 'lameco:load');
 
 before('deploy:symlink', 'lameco:build_assets');
-before('deploy:symlink', 'lameco:upload_assets');
+after('lameco:build_assets', 'lameco:upload_assets');
 
 after('deploy:cleanup', 'lameco:restart_php');
 after('deploy:cleanup', 'lameco:restart_supervisor');
