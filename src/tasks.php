@@ -78,24 +78,42 @@ task('lameco:db_credentials', function () {
     });
 });
 
-desc('Download files from remote to local');
+desc('Download directories from remote to local');
 task('lameco:download', function () {
     $publicDir = get('lameco_public_dir');
-    $remotePath = '{{deploy_path}}/shared/' . $publicDir . '/uploads/';
-    $localPath = $publicDir . '/uploads/';
 
-    writeln('Downloading files from remote to local...');
-    download($remotePath, $localPath);
+    $downloadDirs = get('lameco_download_dirs', [
+        $publicDir . '/uploads',
+    ]);
+
+    writeln('Downloading directories from remote to local...');
+
+    foreach ($downloadDirs as $dir) {
+        $remotePath = '{{deploy_path}}/shared/' . $dir . '/';
+        $localPath = $dir . '/';
+
+        writeln('Downloading directory: ' . $dir);
+        download($remotePath, $localPath);
+    }
 });
 
-desc('Upload local files to remote');
+desc('Upload directories from local to remote');
 task('lameco:upload', function () {
     $publicDir = get('lameco_public_dir');
-    $remotePath = '{{deploy_path}}/shared/' . $publicDir . '/uploads/';
-    $localPath = $publicDir . '/uploads/*';
 
-    writeln('Uploading files from local to remote...');
-    upload($localPath, $remotePath);
+    $uploadDirs = get('lameco_upload_dirs', [
+        $publicDir . '/uploads',
+    ]);
+
+    writeln('Uploading directories from local to remote...');
+
+    foreach ($uploadDirs as $dir) {
+        $remotePath = '{{deploy_path}}/shared/' . $publicDir . '/' . $dir . '/';
+        $localPath = $publicDir . '/' . $dir . '/*';
+
+        writeln('Uploading directory: ' . $dir);
+        upload($localPath, $remotePath);
+    }
 });
 
 desc('Load project configuration to use in custom tasks');
