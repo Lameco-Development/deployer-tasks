@@ -123,31 +123,26 @@ task('lameco:load', function () {
     // Detect project type based on key files
     if (file_exists('bin/console') && file_exists('src/Kernel.php')) {
         $projectType = 'symfony';
+        $dumpDir = 'var';
+        $publicDir = 'public';
     } elseif (file_exists('craft')) {
         $projectType = 'craftcms';
+        $dumpDir = 'storage';
+        $publicDir = 'web';
     } elseif (file_exists('artisan')) {
         $projectType = 'laravel';
+        $dumpDir = 'storage';
+        $publicDir = 'public';
     } else {
         throw new \RuntimeException('Unknown project type: cannot determine from current directory.');
     }
+
     set('lameco_project_type', $projectType);
     writeln('Project type: ' . $projectType);
 
-    // Set dump directory based on project type
-    $dumpDir = match ($projectType) {
-        'symfony' => 'var',
-        'craftcms', 'laravel' => 'storage',
-        default => ''
-    };
     set('lameco_dump_dir', $dumpDir);
     writeln('Dump directory: ' . $dumpDir);
 
-    // Set public directory based on project type
-    $publicDir = match ($projectType) {
-        'symfony', 'laravel' => 'public',
-        'craftcms' => 'web',
-        default => ''
-    };
     set('lameco_public_dir', $publicDir);
     writeln('Public directory: ' . $publicDir);
 });
@@ -157,11 +152,14 @@ task('lameco:build_assets', function () {
     writeln('Installing nvm...');
     runLocally('source $HOME/.nvm/nvm.sh && nvm install');
 
+    writeln('Enabling corepack...');
+    runLocally('corepack enable');
+
     writeln('Installing dependencies...');
-    runLocally('corepack yarn install');
+    runLocally('yarn install');
 
     writeln('Building assets...');
-    runLocally('corepack yarn build');
+    runLocally('yarn build');
 });
 
 desc('Upload built assets to remote');
@@ -180,7 +178,11 @@ task('lameco:upload_assets', function () {
 desc('Restart php-fpm service');
 task('lameco:restart_php', function () {
     writeln('Restarting php-fpm service...');
-    run('sudo systemctl restart php-fpm-' . get('http_user') . '.service');
+
+    $config = 'php-fpm-' . get('http_user') . '.service';
+
+    writeln('Restarting php-fpm config: ' . $config);
+    run('sudo systemctl restart ' . $config);
 });
 
 desc('Restart supervisor');
