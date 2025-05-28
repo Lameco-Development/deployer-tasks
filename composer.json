@@ -11,10 +11,5 @@
     "require": {
         "php": "^8.4",
         "deployer/deployer": "^7.0"
-    },
-    "autoload": {
-        "files": [
-            "src/tasks.php"
-        ]
     }
 }
