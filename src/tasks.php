@@ -89,11 +89,11 @@ task('lameco:download', function () {
     writeln('Downloading directories from remote to local...');
 
     foreach ($downloadDirs as $dir) {
-        $remotePath = '{{deploy_path}}/shared/' . $dir . '/';
-        $localPath = $dir . '/';
+        $remoteDir = '{{deploy_path}}/shared/' . $dir . '/';
+        $localDir = $dir . '/';
 
         writeln('Downloading directory: ' . $dir);
-        download($remotePath, $localPath);
+        download($remoteDir, $localDir);
     }
 });
 
@@ -108,11 +108,11 @@ task('lameco:upload', function () {
     writeln('Uploading directories from local to remote...');
 
     foreach ($uploadDirs as $dir) {
-        $remotePath = '{{deploy_path}}/shared/' . $publicDir . '/' . $dir . '/';
-        $localPath = $publicDir . '/' . $dir . '/*';
+        $localDir = $dir . '/';
+        $remoteDir = '{{deploy_path}}/shared/' . $dir;
 
         writeln('Uploading directory: ' . $dir);
-        upload($localPath, $remotePath);
+        upload($localDir, $remoteDir);
     }
 });
 
@@ -145,15 +145,21 @@ task('lameco:load', function () {
 
     set('lameco_public_dir', $publicDir);
     writeln('Public directory: ' . $publicDir);
-});
+})->once();
 
 desc('Build local assets');
 task('lameco:build_assets', function () {
     writeln('Installing nvm...');
     runLocally('source $HOME/.nvm/nvm.sh && nvm install');
 
-    writeln('Enabling corepack...');
-    runLocally('corepack enable');
+    $nodeVersion = runLocally('source $HOME/.nvm/nvm.sh && node --version');
+
+    if (nodeSupportsCorepack($nodeVersion)) {
+        writeln('Enabling corepack...');
+        runLocally('corepack enable');
+    } else {
+        writeln('Corepack not available for this Node.js version: ' . $nodeVersion);
+    }
 
     writeln('Installing dependencies...');
     runLocally('yarn install');
@@ -164,19 +170,29 @@ task('lameco:build_assets', function () {
 
 desc('Upload built assets to remote');
 task('lameco:upload_assets', function () {
-    $sourceDir = get('lameco_assets_dir', 'web/dist/');
+    $publicDir = get('lameco_public_dir');
 
-    $destDir = '{{release_path}}/' . $sourceDir;
-
-    writeln('Uploading built assets from ' . $sourceDir . ' to remote ' . $destDir . '...');
-    upload($sourceDir, $destDir, [
-        'options' => ['--delete'],
-        'exclude' => ['node_modules', '.git', 'yarn.lock', 'package.json']
+    $assetsDirs = get('lameco_assets_dirs', [
+        $publicDir . '/dist',
     ]);
+
+    writeln('Uploading built assets from local to remote...');
+
+    foreach ($assetsDirs as $dir) {
+        $localDir = $dir . '/';
+        $remoteDir = '{{release_path}}/' . $dir;
+
+        upload($localDir, $remoteDir);
+    }
 });
 
 desc('Restart php-fpm service');
 task('lameco:restart_php', function () {
+    if (!get('lameco_restart_php', true)) {
+        writeln('Php-fpm is not enabled for this project.');
+        return;
+    }
+
     writeln('Restarting php-fpm service...');
 
     $config = 'php-fpm-' . get('http_user') . '.service';
@@ -187,6 +203,11 @@ task('lameco:restart_php', function () {
 
 desc('Restart supervisor');
 task('lameco:restart_supervisor', function () {
+    if (!get('lameco_restart_supervisor', true)) {
+        writeln('Supervisor is not enabled for this project.');
+        return;
+    }
+
     writeln('Restarting supervisor...');
 
     $supervisorConfigs = get('lameco_supervisor_configs', [
@@ -242,7 +263,7 @@ function extractDbCredentials($env): array
         return [
             $env['CRAFT_DB_USER'] ?? null,
             $env['CRAFT_DB_PASSWORD'] ?? null,
-            $env['CRAFT_DB_DATABASE'] ?? null
+            $env['CRAFT_DB_DATABASE']
         ];
     } elseif (!empty($env['DB_DATABASE'])) { // Fallback for Laravel style
         return [
@@ -252,4 +273,21 @@ function extractDbCredentials($env): array
         ];
     }
     return [null, null, null];
+}
+
+/**
+ * Determine if the given Node.js version supports Corepack.
+ */
+function nodeSupportsCorepack($versionString): bool
+{
+    if (preg_match('/v(\d+)\.(\d+)\.(\d+)/', $versionString, $m)) {
+        $major = (int)$m[1];
+        $minor = (int)$m[2];
+        // Corepack from 14.19+, 16.9+, or >16
+        return
+            ($major === 14 && $minor >= 19) ||
+            ($major === 16 && $minor >= 9) ||
+            ($major > 16);
+    }
+    return false;
 }
