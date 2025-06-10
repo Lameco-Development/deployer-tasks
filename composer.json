@@ -2,6 +2,7 @@
     "name": "lameco/deployer-tasks",
     "description": "Common tasks for Deployer",
     "type": "library",
+    "license": "MIT",
     "authors": [
         {
             "name": "Laméco",
