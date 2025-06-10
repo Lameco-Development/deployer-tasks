@@ -5,14 +5,12 @@
     "license": "MIT",
     "authors": [
         {
-            "name": "Laméco",
+            "name": "Laméco Development B.V.",
             "homepage": "https://www.lameco.nl"
         }
     ],
     "require": {
-        "php": "^8.4"
-    },
-    "require-dev": {
+        "php": "^8.4",
         "deployer/deployer": "^7.0"
     }
 }
