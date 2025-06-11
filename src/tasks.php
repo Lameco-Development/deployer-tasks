@@ -220,6 +220,7 @@ task('lameco:restart_supervisor', function () {
     }
 });
 
+before('deploy', 'lameco:load');
 before('lameco:db_download', 'lameco:load');
 before('lameco:db_credentials', 'lameco:load');
 before('lameco:download', 'lameco:load');
