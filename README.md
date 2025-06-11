@@ -10,94 +10,141 @@ A collection of common tasks for [Deployer](https://deployer.org/) to streamline
 ## Installation
 
 ```bash
-composer require lameco/deployer-tasks
+composer require lameco/deployer-tasks --dev
 ```
 
 ## Available Tasks
 
 ### lameco:db_download
 
-Downloads remote database and imports it locally.
+Downloads the remote database and imports it locally.
 
-**Description:** This task connects to the remote server, creates a database dump, downloads it to the local environment, and imports it into the local database.
+**Logic:**  
+- Reads the remote `.env` file to extract DB credentials.
+- Creates a compressed database dump on the remote server.
+- Downloads the dump to a local directory.
+- Reads the local `.env` for local DB credentials.
+- Drops and recreates the local database, then imports the dump.
+- Cleans up dump files both remotely and locally.
 
-**Parameters:**
-- `lameco_dump_dir` - Directory where database dumps are stored (automatically set based on project type)
+**Parameters:**  
+- `lameco_dump_dir` - Directory for database dumps (auto-set by project type).
+
+---
 
 ### lameco:db_credentials
 
-Downloads and displays remote database credentials.
+Displays remote database credentials.
 
-**Description:** Retrieves database credentials from the remote server's .env file and displays them.
+**Logic:**  
+- Reads the remote `.env` file.
+- Extracts and prints the remote DB username and password.
 
-**Parameters:** None
+**Parameters:**  
+- None
+
+---
 
 ### lameco:download
 
 Downloads directories from remote to local.
 
-**Description:** Downloads specified directories from the remote server to the local environment.
+**Logic:**  
+- Downloads each directory in `lameco_download_dirs` from `{{deploy_path}}/shared` on the remote to the same path locally.
+- Default: downloads `[$publicDir . '/uploads']`.
 
-**Parameters:**
+**Parameters:**  
 - `lameco_download_dirs` - Array of directories to download (default: `[$publicDir . '/uploads']`)
-- `lameco_public_dir` - Public directory of the project (automatically set based on project type)
+- `lameco_public_dir` - Public directory (auto-set by project type)
+
+---
 
 ### lameco:upload
 
 Uploads directories from local to remote.
 
-**Description:** Uploads specified directories from the local environment to the remote server.
+**Logic:**  
+- Uploads each directory in `lameco_upload_dirs` from local to `{{deploy_path}}/shared` on the remote.
+- Default: uploads `[$publicDir . '/uploads']`.
 
-**Parameters:**
+**Parameters:**  
 - `lameco_upload_dirs` - Array of directories to upload (default: `[$publicDir . '/uploads']`)
-- `lameco_public_dir` - Public directory of the project (automatically set based on project type)
+- `lameco_public_dir` - Public directory (auto-set by project type)
+
+---
 
 ### lameco:load
 
-Loads project configuration to use in custom tasks.
+Loads project configuration for use in custom tasks.
 
-**Description:** Detects the project type (Symfony, Craft CMS, or Laravel) and sets configuration variables accordingly.
+**Logic:**  
+- Detects project type (Symfony, Craft CMS, Laravel) by checking for key files.
+- Sets `lameco_project_type`, `lameco_dump_dir`, and `lameco_public_dir` accordingly.
 
-**Parameters:**
-- `lameco_project_type` - Type of project (automatically detected)
-- `lameco_dump_dir` - Directory where database dumps are stored (automatically set based on project type)
-- `lameco_public_dir` - Public directory of the project (automatically set based on project type)
+**Parameters:**  
+- `lameco_project_type` - Project type (auto-detected)
+- `lameco_dump_dir` - Dump directory (auto-set)
+- `lameco_public_dir` - Public directory (auto-set)
+
+---
 
 ### lameco:build_assets
 
 Builds local assets.
 
-**Description:** Installs nvm, installs dependencies with yarn, and builds assets.
+**Logic:**  
+- Installs nvm and the correct Node.js version.
+- Enables corepack if supported by Node.js version.
+- Installs dependencies with yarn.
+- Builds assets with yarn.
 
-**Parameters:** None
+**Parameters:**  
+- None
+
+---
 
 ### lameco:upload_assets
 
 Uploads built assets to remote.
 
-**Description:** Uploads built assets from the local environment to the remote server.
+**Logic:**  
+- Uploads each directory in `lameco_assets_dirs` from local to `{{release_path}}` on the remote.
+- Default: uploads `[$publicDir . '/dist']`.
 
-**Parameters:**
-- `lameco_assets_dir` - Directory containing built assets (default: `'web/dist/'`)
+**Parameters:**  
+- `lameco_assets_dirs` - Array of asset directories to upload (default: `[$publicDir . '/dist']`)
+- `lameco_public_dir` - Public directory (auto-set by project type)
+
+---
 
 ### lameco:restart_php
 
 Restarts php-fpm service.
 
-**Description:** Restarts the php-fpm service on the remote server.
+**Logic:**  
+- Restarts the `php-fpm-<http_user>.service` systemd service on the remote server.
+- Skips if `lameco_restart_php` is false.
 
-**Parameters:**
-- `http_user` - User running the PHP-FPM service
+**Parameters:**  
+- `http_user` - User running PHP-FPM
+- `lameco_restart_php` - Enable/disable PHP-FPM restart (default: true)
+
+---
 
 ### lameco:restart_supervisor
 
 Restarts supervisor.
 
-**Description:** Restarts supervisor on the remote server.
+**Logic:**  
+- Restarts each supervisor config in `lameco_supervisor_configs` using `supervisorctl`.
+- Skips if `lameco_restart_supervisor` is false.
 
-**Parameters:**
-- `lameco_supervisor_configs` - Array of supervisor configuration files (default: `[get('http_user') . '.conf']`)
-- `http_user` - User running the supervisor service
+**Parameters:**  
+- `lameco_supervisor_configs` - Array of supervisor config files (default: `[get('http_user') . '.conf']`)
+- `http_user` - User running supervisor
+- `lameco_restart_supervisor` - Enable/disable supervisor restart (default: true)
+
+---
 
 ## Task Dependencies
 
@@ -114,7 +161,7 @@ Include the tasks in your `deploy.php` file:
 require 'vendor/lameco/deployer-tasks/src/tasks.php';
 
 // Override parameters if needed
-set('lameco_assets_dir', 'public/build/');
+set('lameco_assets_dirs', ['public/build']);
 set('lameco_supervisor_configs', ['app.conf', 'queue.conf']);
 ```
 
