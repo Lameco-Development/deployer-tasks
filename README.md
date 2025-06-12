@@ -19,135 +19,9 @@ composer require lameco/deployer-tasks --dev
 
 Loads project configuration for use in custom tasks.
 
-**Logic:**  
 - Detects project type (Symfony, Craft CMS, Laravel) by checking for key files.
 - Sets `lameco_project_type`, `lameco_dump_dir`, and `lameco_public_dir` accordingly.
-- These variables are used in default directory settings via `{{public_dir}}` and can be overridden in your `deploy.php`.
-
-**Parameters:**  
-- `lameco_project_type` - Project type (auto-detected)
-- `lameco_dump_dir` - Dump directory (auto-set)
-- `lameco_public_dir` - Public directory (auto-set)
-
----
-
-### lameco:db_download
-
-Downloads the remote database and imports it locally.
-
-**Logic:**  
-- Reads the remote `.env` file to extract DB credentials.
-- Creates a compressed database dump on the remote server.
-- Downloads the dump to a local directory (as determined by `lameco_dump_dir`).
-- Reads the local `.env` for local DB credentials.
-- Drops and recreates the local database, then imports the dump.
-- Cleans up dump files both remotely and locally.
-
-**Parameters:**  
-- `lameco_dump_dir` - Directory for database dumps (auto-set by project type).
-
----
-
-### lameco:db_credentials
-
-Displays remote database credentials.
-
-**Logic:**  
-- Reads the remote `.env` file.
-- Extracts and prints the remote DB username and password.
-
-**Parameters:**  
-- None
-
----
-
-### lameco:download
-
-Downloads directories from remote to local.
-
-**Logic:**  
-- Downloads each directory in `lameco_download_dirs` from `{{deploy_path}}/shared` on the remote to the same path locally.
-- By default, downloads `['{{public_dir}}/uploads']`.
-- For Craft CMS projects, also downloads the `translations` directory by default.
-
-**Parameters:**  
-- `lameco_download_dirs` - Array of directories to download (default: `['{{public_dir}}/uploads']` or `['{{public_dir}}/uploads', 'translations']` for Craft CMS)
-- `lameco_public_dir` - Public directory (auto-set by project type, can be overridden)
-
----
-
-### lameco:upload
-
-Uploads directories from local to remote.
-
-**Logic:**  
-- Uploads each directory in `lameco_upload_dirs` from local to `{{deploy_path}}/shared` on the remote.
-- By default, uploads `['{{public_dir}}/uploads']`.
-- For Craft CMS projects, also uploads the `translations` directory by default.
-
-**Parameters:**  
-- `lameco_upload_dirs` - Array of directories to upload (default: `['{{public_dir}}/uploads']` or `['{{public_dir}}/uploads', 'translations']` for Craft CMS)
-- `lameco_public_dir` - Public directory (auto-set by project type, can be overridden)
-
----
-
-### lameco:build_assets
-
-Builds local assets.
-
-**Logic:**  
-- Loads Node.js version from `.nvmrc`.
-- Installs the correct Node.js version using nvm if not already installed.
-- Enables corepack if supported by Node.js version.
-- Installs dependencies with yarn.
-- Builds assets with yarn.
-
-**Parameters:**  
-- None
-
----
-
-### lameco:upload_assets
-
-Uploads built assets to remote.
-
-**Logic:**  
-- Uploads each directory in `lameco_assets_dirs` from local to `{{release_path}}` on the remote.
-- Default: uploads `['{{public_dir}}/dist']`.
-
-**Parameters:**  
-- `lameco_assets_dirs` - Array of asset directories to upload (default: `['{{public_dir}}/dist']`)
-- `lameco_public_dir` - Public directory (auto-set by project type, can be overridden)
-
----
-
-### lameco:restart_php
-
-Restarts php-fpm service.
-
-**Logic:**  
-- Restarts the service specified by `lameco_php_config` (default: `php-fpm-{{http_user}}.service`) on the remote server.
-- Skips if `lameco_restart_php` is false.
-
-**Parameters:**  
-- `lameco_php_config` - PHP-FPM systemd service name (default: `php-fpm-{{http_user}}.service`)
-- `http_user` - User running PHP-FPM
-- `lameco_restart_php` - Enable/disable PHP-FPM restart (default: true)
-
----
-
-### lameco:restart_supervisor
-
-Restarts supervisor.
-
-**Logic:**  
-- Restarts each supervisor config in `lameco_supervisor_configs` using `supervisorctl`.
-- Skips if `lameco_restart_supervisor` is false.
-
-**Parameters:**  
-- `lameco_supervisor_configs` - Array of supervisor config files (default: `[get('http_user') . '.conf']`)
-- `http_user` - User running supervisor
-- `lameco_restart_supervisor` - Enable/disable supervisor restart (default: true)
+- These variables are used in default directory settings and can be overridden in your `deploy.php`.
 
 ---
 
@@ -155,13 +29,113 @@ Restarts supervisor.
 
 Prompts to deploy all hosts with the same stage if applicable.
 
-**Logic:**  
-- If a host has a `stage` set, and there are other hosts with the same `stage`, you will be prompted with a confirmation message asking if you want to deploy to all hosts with that stage. This helps prevent accidental partial deployments and ensures consistency across environments.
-
-**Parameters:**  
-- None
+- If a host has a `stage` set, and there are other hosts with the same `stage`, you will be prompted to deploy to all hosts with that stage. This helps prevent accidental partial deployments and ensures consistency across environments.
 
 ---
+
+### lameco:db_download
+
+Downloads the remote database and imports it locally.
+
+- Reads the remote `.env` file to extract DB credentials (supports Symfony, Craft CMS, Laravel formats).
+- Creates a compressed database dump on the remote server.
+- Downloads the dump to a local directory (as determined by `lameco_dump_dir`).
+- Reads the local `.env` for local DB credentials.
+- Drops and recreates the local database, then imports the dump.
+- Cleans up dump files both remotely and locally.
+
+---
+
+### lameco:db_credentials
+
+Displays remote database credentials.
+
+- Reads the remote `.env` file.
+- Extracts and prints the remote DB username and password.
+
+---
+
+### lameco:download
+
+Downloads directories from remote to local.
+
+- Downloads each directory in `lameco_download_dirs` from `{{deploy_path}}/shared` on the remote to the same path locally.
+- By default, downloads `['{{lameco_public_dir}}/uploads']`.
+- For Craft CMS projects, also downloads the `translations` directory by default.
+
+---
+
+### lameco:upload
+
+Uploads directories from local to remote.
+
+- Uploads each directory in `lameco_upload_dirs` from local to `{{deploy_path}}/shared` on the remote.
+- By default, uploads `['{{lameco_public_dir}}/uploads']`.
+- For Craft CMS projects, also uploads the `translations` directory by default.
+
+---
+
+### lameco:build_assets
+
+Builds local assets.
+
+- Loads Node.js version from `.nvmrc`.
+- Installs the correct Node.js version using nvm if not already installed.
+- Enables corepack if supported by Node.js version.
+- Installs dependencies with yarn.
+- Builds assets with yarn.
+
+---
+
+### lameco:upload_assets
+
+Uploads built assets to remote.
+
+- Uploads each directory in `lameco_assets_dirs` from local to `{{release_path}}` on the remote.
+- Default: uploads `['{{lameco_public_dir}}/dist']`.
+
+---
+
+### lameco:restart_php
+
+Restarts php-fpm service.
+
+- Restarts the service specified by `lameco_php_config` (default: `php-fpm-{{http_user}}.service`) on the remote server.
+- Skips if `lameco_restart_php` is false.
+
+---
+
+### lameco:restart_supervisor
+
+Restarts supervisor.
+
+- Restarts each supervisor config in `lameco_supervisor_configs` using `supervisorctl`.
+- Skips if `lameco_restart_supervisor` is false.
+
+---
+
+### crontab:sync
+
+Synchronizes crontab jobs for the project.
+
+- Automatically sets up crontab jobs based on project type and detected plugins (e.g., Craft CMS with Blitz or Formie).
+- Jobs are defined in the `crontab:jobs` configuration, which is dynamically generated for Craft CMS projects.
+
+---
+
+## Parameters
+
+- `lameco_project_type`: Project type (auto-detected: `symfony`, `craftcms`, `laravel`)
+- `lameco_dump_dir`: Directory for database dumps (auto-set by project type)
+- `lameco_public_dir`: Public directory (auto-set by project type)
+- `lameco_download_dirs`: Directories to download from remote (default: `['{{lameco_public_dir}}/uploads']`, plus `translations` for Craft CMS)
+- `lameco_upload_dirs`: Directories to upload to remote (default: `['{{lameco_public_dir}}/uploads']`, plus `translations` for Craft CMS)
+- `lameco_assets_dirs`: Asset directories to upload (default: `['{{lameco_public_dir}}/dist']`)
+- `lameco_restart_php`: Enable/disable PHP-FPM restart (default: true)
+- `lameco_php_config`: PHP-FPM systemd service name (default: `php-fpm-{{http_user}}.service`)
+- `lameco_restart_supervisor`: Enable/disable supervisor restart (default: true)
+- `lameco_supervisor_configs`: Supervisor config files (default: `[get('http_user') . '.conf']`)
+- `http_user`: User running PHP-FPM or supervisor
 
 ## Task Dependencies
 
@@ -171,6 +145,7 @@ Prompts to deploy all hosts with the same stage if applicable.
 - `lameco:build_assets` runs before `deploy:symlink`
 - `lameco:upload_assets` runs after `lameco:build_assets`
 - `lameco:restart_php` and `lameco:restart_supervisor` run after `deploy:cleanup`
+- `crontab:sync` runs after `deploy:success`
 
 ## Usage
 
@@ -188,3 +163,4 @@ set('lameco_php_config', 'php-fpm-customuser.service');
 ## License
 
 This package is open-sourced software licensed under the MIT license.
+

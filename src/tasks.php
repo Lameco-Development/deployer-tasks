@@ -2,6 +2,8 @@
 
 namespace Deployer;
 
+require 'contrib/crontab.php';
+
 // Default configuration
 set('deploy_path', '~');
 set('keep_releases', 3);
@@ -29,6 +31,34 @@ set('lameco_supervisor_configs', ['{{http_user}}.conf']);
 
 set('lameco_restart_php', true);
 set('lameco_php_config', 'php-fpm-{{http_user}}.service');
+
+set('crontab:jobs', function () {
+    $jobs = [];
+
+    if (get('lameco_project_type') === 'craftcms') {
+        // Check composer.json for plugins
+        $composerJsonPath = 'composer.json';
+        if (file_exists($composerJsonPath)) {
+            $composer = json_decode(file_get_contents($composerJsonPath), true, 512, JSON_THROW_ON_ERROR);
+            $require = array_merge(
+                $composer['require'] ?? [],
+                $composer['require-dev'] ?? []
+            );
+
+            // Only if project uses PutYourLightson/blitz
+            if (array_key_exists('putyourlightson/craft-blitz', $require)) {
+                $jobs[] = '5 * * * * cd {{current_path}} && {{bin/php}} craft blitz/cache/refresh-expired';
+            }
+
+            // Only if project uses Formie
+            if (array_key_exists('verbb/formie', $require)) {
+                $jobs[] = '*/10 * * * * cd {{current_path}} && {{bin/php}} craft formie/gc/prune-data-retention-submissions';
+            }
+        }
+    }
+
+    return $jobs;
+});
 
 // Load project configuration to use in custom tasks.
 desc('Load project configuration to use in custom tasks');
@@ -327,6 +357,8 @@ after('lameco:build_assets', 'lameco:upload_assets');
 
 after('deploy:cleanup', 'lameco:restart_php');
 after('deploy:cleanup', 'lameco:restart_supervisor');
+
+after('deploy:success', 'crontab:sync');
 
 /**
  * Parse .env content into an associative array.
