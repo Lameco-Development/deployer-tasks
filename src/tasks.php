@@ -2,6 +2,10 @@
 
 namespace Deployer;
 
+// Default configuration
+set('deploy_path', '~');
+set('keep_releases', 3);
+
 // Load project configuration to use in custom tasks.
 desc('Load project configuration to use in custom tasks');
 task('lameco:load', function () {
