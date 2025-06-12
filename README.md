@@ -22,6 +22,7 @@ Loads project configuration for use in custom tasks.
 **Logic:**  
 - Detects project type (Symfony, Craft CMS, Laravel) by checking for key files.
 - Sets `lameco_project_type`, `lameco_dump_dir`, and `lameco_public_dir` accordingly.
+- These variables are used in default directory settings via `{{public_dir}}` and can be overridden in your `deploy.php`.
 
 **Parameters:**  
 - `lameco_project_type` - Project type (auto-detected)
@@ -66,12 +67,12 @@ Downloads directories from remote to local.
 
 **Logic:**  
 - Downloads each directory in `lameco_download_dirs` from `{{deploy_path}}/shared` on the remote to the same path locally.
-- By default, downloads `[$publicDir . '/uploads']`.
+- By default, downloads `['{{public_dir}}/uploads']`.
 - For Craft CMS projects, also downloads the `translations` directory by default.
 
 **Parameters:**  
-- `lameco_download_dirs` - Array of directories to download (default: `[$publicDir . '/uploads']` or `[$publicDir . '/uploads', 'translations']` for Craft CMS)
-- `lameco_public_dir` - Public directory (auto-set by project type)
+- `lameco_download_dirs` - Array of directories to download (default: `['{{public_dir}}/uploads']` or `['{{public_dir}}/uploads', 'translations']` for Craft CMS)
+- `lameco_public_dir` - Public directory (auto-set by project type, can be overridden)
 
 ---
 
@@ -81,12 +82,12 @@ Uploads directories from local to remote.
 
 **Logic:**  
 - Uploads each directory in `lameco_upload_dirs` from local to `{{deploy_path}}/shared` on the remote.
-- By default, uploads `[$publicDir . '/uploads']`.
+- By default, uploads `['{{public_dir}}/uploads']`.
 - For Craft CMS projects, also uploads the `translations` directory by default.
 
 **Parameters:**  
-- `lameco_upload_dirs` - Array of directories to upload (default: `[$publicDir . '/uploads']` or `[$publicDir . '/uploads', 'translations']` for Craft CMS)
-- `lameco_public_dir` - Public directory (auto-set by project type)
+- `lameco_upload_dirs` - Array of directories to upload (default: `['{{public_dir}}/uploads']` or `['{{public_dir}}/uploads', 'translations']` for Craft CMS)
+- `lameco_public_dir` - Public directory (auto-set by project type, can be overridden)
 
 ---
 
@@ -112,11 +113,11 @@ Uploads built assets to remote.
 
 **Logic:**  
 - Uploads each directory in `lameco_assets_dirs` from local to `{{release_path}}` on the remote.
-- Default: uploads `[$publicDir . '/dist']`.
+- Default: uploads `['{{public_dir}}/dist']`.
 
 **Parameters:**  
-- `lameco_assets_dirs` - Array of asset directories to upload (default: `[$publicDir . '/dist']`)
-- `lameco_public_dir` - Public directory (auto-set by project type)
+- `lameco_assets_dirs` - Array of asset directories to upload (default: `['{{public_dir}}/dist']`)
+- `lameco_public_dir` - Public directory (auto-set by project type, can be overridden)
 
 ---
 
@@ -125,10 +126,11 @@ Uploads built assets to remote.
 Restarts php-fpm service.
 
 **Logic:**  
-- Restarts the `php-fpm-<http_user>.service` systemd service on the remote server.
+- Restarts the service specified by `lameco_php_config` (default: `php-fpm-{{http_user}}.service`) on the remote server.
 - Skips if `lameco_restart_php` is false.
 
 **Parameters:**  
+- `lameco_php_config` - PHP-FPM systemd service name (default: `php-fpm-{{http_user}}.service`)
 - `http_user` - User running PHP-FPM
 - `lameco_restart_php` - Enable/disable PHP-FPM restart (default: true)
 
@@ -177,9 +179,10 @@ Include the tasks in your `deploy.php` file:
 ```php
 require 'vendor/lameco/deployer-tasks/src/tasks.php';
 
-// Override parameters if needed
+// Override or extend parameters if needed
 set('lameco_assets_dirs', ['public/build']);
-set('lameco_supervisor_configs', ['app.conf', 'queue.conf']);
+add('lameco_supervisor_configs', ['app.conf', 'queue.conf']);
+set('lameco_php_config', 'php-fpm-customuser.service');
 ```
 
 ## License

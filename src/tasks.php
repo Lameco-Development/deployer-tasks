@@ -2,9 +2,35 @@
 
 namespace Deployer;
 
+require 'contrib/crontab.php';
+
 // Default configuration
 set('deploy_path', '~');
 set('keep_releases', 3);
+
+set('lameco_download_dirs', function () {
+    $dirs = ['{{lameco_public_dir}}/uploads'];
+    if (get('lameco_project_type') === 'craftcms') {
+        $dirs[] = 'translations';
+    }
+    return $dirs;
+});
+
+set('lameco_upload_dirs', function () {
+    $dirs = ['{{lameco_public_dir}}/uploads'];
+    if (get('lameco_project_type') === 'craftcms') {
+        $dirs[] = 'translations';
+    }
+    return $dirs;
+});
+
+set('lameco_assets_dirs', ['{{lameco_public_dir}}/dist']);
+
+set('lameco_restart_supervisor', true);
+set('lameco_supervisor_configs', ['{{http_user}}.conf']);
+
+set('lameco_restart_php', true);
+set('lameco_php_config', 'php-fpm-{{http_user}}.service');
 
 // Load project configuration to use in custom tasks.
 desc('Load project configuration to use in custom tasks');
@@ -86,12 +112,11 @@ task('lameco:db_download', function () {
             return;
         }
 
-        $dumpDir = get('lameco_dump_dir');
         $dumpFile = 'current_' . $remoteDatabaseName . '.sql.gz';
         set('dump_file', $dumpFile);
 
-        $remotePath = '~/' . $dumpFile;
-        $localPath = $dumpDir . '/' . $dumpFile;
+        $remotePath = '~/{{dump_file}}';
+        $localPath = '{{lameco_dump_dir}}/{{dump_file}}';
 
         writeln('Creating remote database dump...');
         run('mysqldump --quick --single-transaction -u ' . $remoteDatabaseUser . ' -p' . $remoteDatabasePassword . ' ' . $remoteDatabaseName . ' | gzip > ' . $remotePath);
@@ -103,9 +128,7 @@ task('lameco:db_download', function () {
         run('rm ' . $remotePath);
     });
 
-    $dumpFile = get('dump_file');
-    $dumpDir = get('lameco_dump_dir');
-    $localPath = $dumpDir . '/' . $dumpFile;
+    $localPath = '{{lameco_dump_dir}}/{{dump_file}}';
 
     writeln('Importing database from local dump: ' . $localPath . '...');
 
@@ -152,17 +175,12 @@ task('lameco:db_credentials', function () {
 // Download directories from remote to local.
 desc('Download directories from remote to local');
 task('lameco:download', function () {
-    $publicDir = get('lameco_public_dir');
+    $downloadDirs = get('lameco_download_dirs');
 
-    $defaultDownloadDirs = [
-        $publicDir . '/uploads',
-    ];
-
-    if (get('lameco_project_type') === 'craftcms') {
-        $defaultDownloadDirs[] = 'translations';
+    if (empty($downloadDirs)) {
+        writeln('No download directories configured.');
+        return;
     }
-
-    $downloadDirs = get('lameco_download_dirs', $defaultDownloadDirs);
 
     writeln('Downloading directories from remote to local...');
 
@@ -178,17 +196,12 @@ task('lameco:download', function () {
 // Upload directories from local to remote.
 desc('Upload directories from local to remote');
 task('lameco:upload', function () {
-    $publicDir = get('lameco_public_dir');
+    $uploadDirs = get('lameco_upload_dirs');
 
-    $defaultUploadDirs = [
-        $publicDir . '/uploads',
-    ];
-
-    if (get('lameco_project_type') === 'craftcms') {
-        $defaultUploadDirs[] = 'translations';
+    if (empty($uploadDirs)) {
+        writeln('No upload directories configured.');
+        return;
     }
-
-    $uploadDirs = get('lameco_upload_dirs', $defaultUploadDirs);
 
     writeln('Uploading directories from local to remote...');
 
@@ -241,13 +254,12 @@ task('lameco:build_assets', function () {
 // Upload built assets to remote.
 desc('Upload built assets to remote');
 task('lameco:upload_assets', function () {
-    $publicDir = get('lameco_public_dir');
+    $assetsDirs = get('lameco_assets_dirs');
 
-    $defaultAssetsDirs = [
-        $publicDir . '/dist',
-    ];
-
-    $assetsDirs = get('lameco_assets_dirs', $defaultAssetsDirs);
+    if (empty($assetsDirs)) {
+        writeln('No assets directories configured.');
+        return;
+    }
 
     writeln('Uploading built assets from local to remote...');
 
@@ -263,14 +275,19 @@ task('lameco:upload_assets', function () {
 // Restart php-fpm service.
 desc('Restart php-fpm service');
 task('lameco:restart_php', function () {
-    if (!get('lameco_restart_php', true)) {
+    if (!get('lameco_restart_php')) {
         writeln('php-fpm is not enabled for this project.');
         return;
     }
 
-    writeln('Restarting php-fpm service...');
+    $config = get('lameco_php_config');
 
-    $config = 'php-fpm-' . get('http_user') . '.service';
+    if (!$config) {
+        writeln('No php-fpm config configured.');
+        return;
+    }
+
+    writeln('Restarting php-fpm service...');
 
     writeln('Restarting php-fpm config: ' . $config . '...');
     run('sudo systemctl restart ' . $config);
@@ -279,16 +296,19 @@ task('lameco:restart_php', function () {
 // Restart supervisor.
 desc('Restart supervisor');
 task('lameco:restart_supervisor', function () {
-    if (!get('lameco_restart_supervisor', true)) {
+    if (!get('lameco_restart_supervisor')) {
         writeln('Supervisor is not enabled for this project.');
         return;
     }
 
-    writeln('Restarting supervisor...');
+    $supervisorConfigs = get('lameco_supervisor_configs');
 
-    $supervisorConfigs = get('lameco_supervisor_configs', [
-        get('http_user') . '.conf',
-    ]);
+    if (empty($supervisorConfigs)) {
+        writeln('No supervisor configs configured.');
+        return;
+    }
+
+    writeln('Restarting supervisor...');
 
     foreach ($supervisorConfigs as $config) {
         writeln('Restarting supervisor config: ' . $config . '...');
@@ -309,6 +329,13 @@ after('lameco:build_assets', 'lameco:upload_assets');
 
 after('deploy:cleanup', 'lameco:restart_php');
 after('deploy:cleanup', 'lameco:restart_supervisor');
+
+after('deploy:success', 'crontab:sync');
+
+// Add default crontab jobs for craft
+add('crontab:jobs', [
+    '* * * * * cd {{current_path}} && {{bin/php}} artisan schedule:run >> /dev/null 2>&1',
+]);
 
 /**
  * Parse .env content into an associative array.
