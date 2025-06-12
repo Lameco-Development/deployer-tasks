@@ -2,125 +2,12 @@
 
 namespace Deployer;
 
-desc('Download remote database and import locally');
-task('lameco:db_download', function () {
-    within('{{deploy_path}}/shared', function () {
-        writeln('Reading remote .env...');
-        $remoteEnvContent = run('cat .env');
-        $remoteEnv = fetchEnv($remoteEnvContent);
-
-        [$remoteDatabaseUser, $remoteDatabasePassword, $remoteDatabaseName] = extractDbCredentials($remoteEnv);
-
-        if (!isset($remoteDatabaseUser, $remoteDatabasePassword, $remoteDatabaseName)) {
-            error('Could not extract remote database credentials.');
-            return;
-        }
-
-        $dumpDir = get('lameco_dump_dir');
-        $dumpFile = 'current_' . $remoteDatabaseName . '.sql.gz';
-        set('dump_file', $dumpFile);
-
-        $remotePath = '~/' . $dumpFile;
-        $localPath = $dumpDir . '/' . $dumpFile;
-
-        writeln('Creating database dump...');
-        run('mysqldump --quick --single-transaction -u ' . $remoteDatabaseUser . ' -p' . $remoteDatabasePassword . ' ' . $remoteDatabaseName . ' | gzip > ' . $remotePath);
-
-        writeln('Downloading database dump to local: ' . $localPath);
-        download($remotePath, $localPath);
-
-        writeln('Removing remote database dump...');
-        run('rm ' . $remotePath);
-    });
-
-    $dumpFile = get('dump_file');
-    $dumpDir = get('lameco_dump_dir');
-    $localPath = $dumpDir . '/' . $dumpFile;
-
-    writeln('Importing database from ' . $localPath . '...');
-
-    writeln('Reading local .env...');
-    $localEnvContent = file_get_contents('.env');
-    $localEnv = fetchEnv($localEnvContent);
-
-    [$localDatabaseUser, $localDatabasePassword, $localDatabaseName] = extractDbCredentials($localEnv);
-
-    if (!isset($localDatabaseUser, $localDatabasePassword, $localDatabaseName)) {
-        error('Could not extract local database credentials.');
-        return;
-    }
-
-    writeln('Creating local database if it does not exist...');
-    runLocally('mysql -u ' . $localDatabaseUser . ' -p' . $localDatabasePassword . ' -e \'DROP DATABASE IF EXISTS ' . $localDatabaseName . '; CREATE DATABASE ' . $localDatabaseName . ';\'');
-
-    writeln('Importing database dump...');
-    runLocally('gunzip -c ' . $localPath . ' | mysql -u ' . $localDatabaseUser . ' -p' . $localDatabasePassword . ' ' . $localDatabaseName);
-
-    writeln('Removing local dump file...');
-    runLocally('rm ' . $localPath);
-});
-
-desc('Download remote database credentials');
-task('lameco:db_credentials', function () {
-    within('{{deploy_path}}/shared', function () {
-        $envContent = run('cat .env');
-        $env = fetchEnv($envContent);
-
-        [$remoteDatabaseUser, $remoteDatabasePassword] = extractDbCredentials($env);
-
-        if (!isset($remoteDatabaseUser, $remoteDatabasePassword)) {
-            writeln('Remote database credentials could not be extracted.');
-            return;
-        }
-
-        writeln('Username: ' . $remoteDatabaseUser);
-        writeln('Password: ' . $remoteDatabasePassword);
-    });
-});
-
-desc('Download directories from remote to local');
-task('lameco:download', function () {
-    $publicDir = get('lameco_public_dir');
-
-    $downloadDirs = get('lameco_download_dirs', [
-        $publicDir . '/uploads',
-    ]);
-
-    writeln('Downloading directories from remote to local...');
-
-    foreach ($downloadDirs as $dir) {
-        $remoteDir = '{{deploy_path}}/shared/' . $dir . '/';
-        $localDir = $dir . '/';
-
-        writeln('Downloading directory: ' . $dir);
-        download($remoteDir, $localDir);
-    }
-});
-
-desc('Upload directories from local to remote');
-task('lameco:upload', function () {
-    $publicDir = get('lameco_public_dir');
-
-    $uploadDirs = get('lameco_upload_dirs', [
-        $publicDir . '/uploads',
-    ]);
-
-    writeln('Uploading directories from local to remote...');
-
-    foreach ($uploadDirs as $dir) {
-        $localDir = $dir . '/';
-        $remoteDir = '{{deploy_path}}/shared/' . $dir;
-
-        writeln('Uploading directory: ' . $dir);
-        upload($localDir, $remoteDir);
-    }
-});
-
+// Load project configuration to use in custom tasks.
 desc('Load project configuration to use in custom tasks');
 task('lameco:load', function () {
     writeln('Loading project configuration...');
 
-    // Detect project type based on key files
+    // Detect project type based on key files.
     if (file_exists('bin/console') && file_exists('src/Kernel.php')) {
         $projectType = 'symfony';
         $dumpDir = 'var';
@@ -138,27 +25,173 @@ task('lameco:load', function () {
     }
 
     set('lameco_project_type', $projectType);
-    writeln('Project type: ' . $projectType);
+    writeln('Project type detected: ' . $projectType);
 
     set('lameco_dump_dir', $dumpDir);
-    writeln('Dump directory: ' . $dumpDir);
+    writeln('Dump directory set to: ' . $dumpDir);
 
     set('lameco_public_dir', $publicDir);
-    writeln('Public directory: ' . $publicDir);
+    writeln('Public directory set to: ' . $publicDir);
 })->once();
 
+// Download remote database and import locally.
+desc('Download remote database and import locally');
+task('lameco:db_download', function () {
+    within('{{deploy_path}}/shared', function () {
+        writeln('Reading remote .env file...');
+        $remoteEnvContent = run('cat .env');
+        $remoteEnv = fetchEnv($remoteEnvContent);
+
+        [$remoteDatabaseUser, $remoteDatabasePassword, $remoteDatabaseName] = extractDbCredentials($remoteEnv);
+
+        if (!isset($remoteDatabaseUser, $remoteDatabasePassword, $remoteDatabaseName)) {
+            error('Could not extract remote database credentials.');
+            return;
+        }
+
+        $dumpDir = get('lameco_dump_dir');
+        $dumpFile = 'current_' . $remoteDatabaseName . '.sql.gz';
+        set('dump_file', $dumpFile);
+
+        $remotePath = '~/' . $dumpFile;
+        $localPath = $dumpDir . '/' . $dumpFile;
+
+        writeln('Creating remote database dump...');
+        run('mysqldump --quick --single-transaction -u ' . $remoteDatabaseUser . ' -p' . $remoteDatabasePassword . ' ' . $remoteDatabaseName . ' | gzip > ' . $remotePath);
+
+        writeln('Downloading database dump to local path: ' . $localPath . '...');
+        download($remotePath, $localPath);
+
+        writeln('Removing remote database dump...');
+        run('rm ' . $remotePath);
+    });
+
+    $dumpFile = get('dump_file');
+    $dumpDir = get('lameco_dump_dir');
+    $localPath = $dumpDir . '/' . $dumpFile;
+
+    writeln('Importing database from local dump: ' . $localPath . '...');
+
+    writeln('Reading local .env file...');
+    $localEnvContent = file_get_contents('.env');
+    $localEnv = fetchEnv($localEnvContent);
+
+    [$localDatabaseUser, $localDatabasePassword, $localDatabaseName] = extractDbCredentials($localEnv);
+
+    if (!isset($localDatabaseUser, $localDatabasePassword, $localDatabaseName)) {
+        error('Could not extract local database credentials.');
+        return;
+    }
+
+    writeln('Creating local database if it does not exist...');
+    runLocally('mysql -u ' . $localDatabaseUser . ' -p' . $localDatabasePassword . ' -e \'DROP DATABASE IF EXISTS ' . $localDatabaseName . '; CREATE DATABASE ' . $localDatabaseName . ';\'');
+
+    writeln('Importing database dump into local database...');
+    runLocally('gunzip -c ' . $localPath . ' | mysql -u ' . $localDatabaseUser . ' -p' . $localDatabasePassword . ' ' . $localDatabaseName);
+
+    writeln('Removing local dump file...');
+    runLocally('rm ' . $localPath);
+});
+
+// Download remote database credentials.
+desc('Download remote database credentials');
+task('lameco:db_credentials', function () {
+    within('{{deploy_path}}/shared', function () {
+        $envContent = run('cat .env');
+        $env = fetchEnv($envContent);
+
+        [$remoteDatabaseUser, $remoteDatabasePassword] = extractDbCredentials($env);
+
+        if (!isset($remoteDatabaseUser, $remoteDatabasePassword)) {
+            writeln('Could not extract remote database credentials.');
+            return;
+        }
+
+        writeln('Remote database username: ' . $remoteDatabaseUser);
+        writeln('Remote database password: ' . $remoteDatabasePassword);
+    });
+});
+
+// Download directories from remote to local.
+desc('Download directories from remote to local');
+task('lameco:download', function () {
+    $publicDir = get('lameco_public_dir');
+
+    $defaultDownloadDirs = [
+        $publicDir . '/uploads',
+    ];
+
+    if (get('lameco_project_type') === 'craftcms') {
+        $defaultDownloadDirs[] = 'translations';
+    }
+
+    $downloadDirs = get('lameco_download_dirs', $defaultDownloadDirs);
+
+    writeln('Downloading directories from remote to local...');
+
+    foreach ($downloadDirs as $dir) {
+        $remoteDir = '{{deploy_path}}/shared/' . $dir . '/';
+        $localDir = $dir . '/';
+
+        writeln('Downloading directory: ' . $dir . '...');
+        download($remoteDir, $localDir);
+    }
+});
+
+// Upload directories from local to remote.
+desc('Upload directories from local to remote');
+task('lameco:upload', function () {
+    $publicDir = get('lameco_public_dir');
+
+    $defaultUploadDirs = [
+        $publicDir . '/uploads',
+    ];
+
+    if (get('lameco_project_type') === 'craftcms') {
+        $defaultUploadDirs[] = 'translations';
+    }
+
+    $uploadDirs = get('lameco_upload_dirs', $defaultUploadDirs);
+
+    writeln('Uploading directories from local to remote...');
+
+    foreach ($uploadDirs as $dir) {
+        $localDir = $dir . '/';
+        $remoteDir = '{{deploy_path}}/shared/' . $dir;
+
+        writeln('Uploading directory: ' . $dir . '...');
+        upload($localDir, $remoteDir);
+    }
+});
+
+// Build local assets.
 desc('Build local assets');
 task('lameco:build_assets', function () {
-    writeln('Installing nvm...');
-    runLocally('source $HOME/.nvm/nvm.sh && nvm install');
+    writeln('Loading Node.js version from .nvmrc...');
 
-    $nodeVersion = runLocally('source $HOME/.nvm/nvm.sh && node --version');
+    if (!file_exists('.nvmrc')) {
+        throw new \RuntimeException('.nvmrc file not found.');
+    }
+
+    $nodeVersion = trim(file_get_contents('.nvmrc'));
+
+    writeln('Using Node.js version: ' . $nodeVersion);
+
+    writeln('Checking if Node.js version is already installed...');
+
+    $nodeIsInstalled = testLocally('source $HOME/.nvm/nvm.sh && nvm ls ' . $nodeVersion . ' | grep -q ' . $nodeVersion);
+
+    if ($nodeIsInstalled) {
+        writeln('Node.js version is already installed. Using it...');
+        runLocally('source $HOME/.nvm/nvm.sh && nvm use ' . $nodeVersion);
+    } else {
+        writeln('Node.js version is not installed. Installing...');
+        runLocally('source $HOME/.nvm/nvm.sh && nvm install ' . $nodeVersion);
+    }
 
     if (nodeSupportsCorepack($nodeVersion)) {
-        writeln('Enabling corepack...');
+        writeln('Enabling Corepack...');
         runLocally('corepack enable');
-    } else {
-        writeln('Corepack not available for this Node.js version: ' . $nodeVersion);
     }
 
     writeln('Installing dependencies...');
@@ -168,13 +201,16 @@ task('lameco:build_assets', function () {
     runLocally('yarn build');
 });
 
+// Upload built assets to remote.
 desc('Upload built assets to remote');
 task('lameco:upload_assets', function () {
     $publicDir = get('lameco_public_dir');
 
-    $assetsDirs = get('lameco_assets_dirs', [
+    $defaultAssetsDirs = [
         $publicDir . '/dist',
-    ]);
+    ];
+
+    $assetsDirs = get('lameco_assets_dirs', $defaultAssetsDirs);
 
     writeln('Uploading built assets from local to remote...');
 
@@ -182,14 +218,16 @@ task('lameco:upload_assets', function () {
         $localDir = $dir . '/';
         $remoteDir = '{{release_path}}/' . $dir;
 
+        writeln('Uploading assets directory: ' . $dir . '...');
         upload($localDir, $remoteDir);
     }
 });
 
+// Restart php-fpm service.
 desc('Restart php-fpm service');
 task('lameco:restart_php', function () {
     if (!get('lameco_restart_php', true)) {
-        writeln('Php-fpm is not enabled for this project.');
+        writeln('php-fpm is not enabled for this project.');
         return;
     }
 
@@ -197,10 +235,11 @@ task('lameco:restart_php', function () {
 
     $config = 'php-fpm-' . get('http_user') . '.service';
 
-    writeln('Restarting php-fpm config: ' . $config);
+    writeln('Restarting php-fpm config: ' . $config . '...');
     run('sudo systemctl restart ' . $config);
 });
 
+// Restart supervisor.
 desc('Restart supervisor');
 task('lameco:restart_supervisor', function () {
     if (!get('lameco_restart_supervisor', true)) {
@@ -215,7 +254,7 @@ task('lameco:restart_supervisor', function () {
     ]);
 
     foreach ($supervisorConfigs as $config) {
-        writeln('Restarting supervisor config: ' . $config);
+        writeln('Restarting supervisor config: ' . $config . '...');
         run('supervisorctl -c /etc/projects/supervisor/' . $config . ' restart all');
     }
 });
@@ -233,7 +272,7 @@ after('deploy:cleanup', 'lameco:restart_php');
 after('deploy:cleanup', 'lameco:restart_supervisor');
 
 /**
- * Parse .env content into associative array.
+ * Parse .env content into an associative array.
  */
 function fetchEnv($envContent): array
 {
@@ -252,7 +291,7 @@ function fetchEnv($envContent): array
 
 /**
  * Extract DB credentials from env array.
- * Supports DATABASE_URL (e.g. Symfony) and CRAFT_DB_* (e.g. Craft CMS).
+ * Supports DATABASE_URL (e.g. Symfony), CRAFT_DB_* (e.g. Craft CMS), and Laravel style.
  */
 function extractDbCredentials($env): array
 {
