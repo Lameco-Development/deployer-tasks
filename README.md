@@ -149,8 +149,22 @@ Restarts supervisor.
 
 ---
 
+### lameco:stage_prompt
+
+Prompts to deploy all hosts with the same stage if applicable.
+
+**Logic:**  
+- If a host has a `stage` set, and there are other hosts with the same `stage`, you will be prompted with a confirmation message asking if you want to deploy to all hosts with that stage. This helps prevent accidental partial deployments and ensures consistency across environments.
+
+**Parameters:**  
+- None
+
+---
+
 ## Task Dependencies
 
+- `lameco:load` runs before `deploy`
+- `lameco:stage_prompt` runs before `deploy`
 - `lameco:db_download`, `lameco:db_credentials`, `lameco:download`, and `lameco:upload` depend on `lameco:load`
 - `lameco:build_assets` runs before `deploy:symlink`
 - `lameco:upload_assets` runs after `lameco:build_assets`
@@ -171,4 +185,3 @@ set('lameco_supervisor_configs', ['app.conf', 'queue.conf']);
 ## License
 
 This package is open-sourced software licensed under the MIT license.
-

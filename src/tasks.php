@@ -34,6 +34,39 @@ task('lameco:load', function () {
     writeln('Public directory set to: ' . $publicDir);
 })->once();
 
+// Prompt to deploy all hosts with the same stage if applicable
+desc('Prompt to deploy all hosts with the same stage if applicable');
+task('lameco:stage_prompt', function () {
+    $selectedHost = currentHost();
+    if (!$selectedHost) {
+        return;
+    }
+
+    $stage = $selectedHost->getLabels()['stage'] ?? null;
+    if (!$stage) {
+        return;
+    }
+
+    // Get all defined hosts from Deployer config.
+    $allHosts = Deployer::get()->hosts;
+    $hostsWithStage = [];
+    foreach ($allHosts as $host) {
+        if (($host->getLabels()['stage'] ?? null) === $stage) {
+            $hostsWithStage[] = $host->getAlias();
+        }
+    }
+
+    // Only prompt if there are multiple hosts with this stage and not all are already selected.
+    if (count($hostsWithStage) > 1 && count($allHosts) !== count($hostsWithStage)) {
+        info('Host ' . $selectedHost->getAlias() . ' (' . $selectedHost->getHostname() . ') has stage ' . $stage);
+        $confirmation = askConfirmation('Do you want to deploy to all hosts with stage ' . $stage . '?', false);
+        if ($confirmation) {
+            set('selected_hosts', $hostsWithStage);
+            info('Deploying to all hosts with stage ' . $stage);
+        }
+    }
+});
+
 // Download remote database and import locally.
 desc('Download remote database and import locally');
 task('lameco:db_download', function () {
@@ -260,6 +293,8 @@ task('lameco:restart_supervisor', function () {
 });
 
 before('deploy', 'lameco:load');
+before('deploy', 'lameco:stage_prompt');
+
 before('lameco:db_download', 'lameco:load');
 before('lameco:db_credentials', 'lameco:load');
 before('lameco:download', 'lameco:load');
