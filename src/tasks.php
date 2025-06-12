@@ -2,8 +2,6 @@
 
 namespace Deployer;
 
-require 'contrib/crontab.php';
-
 // Default configuration
 set('deploy_path', '~');
 set('keep_releases', 3);
@@ -329,13 +327,6 @@ after('lameco:build_assets', 'lameco:upload_assets');
 
 after('deploy:cleanup', 'lameco:restart_php');
 after('deploy:cleanup', 'lameco:restart_supervisor');
-
-after('deploy:success', 'crontab:sync');
-
-// Add default crontab jobs for craft
-add('crontab:jobs', [
-    '* * * * * cd {{current_path}} && {{bin/php}} artisan schedule:run >> /dev/null 2>&1',
-]);
 
 /**
  * Parse .env content into an associative array.
