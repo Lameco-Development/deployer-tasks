@@ -52,7 +52,7 @@ set('crontab:jobs', function () {
 
             // Only if project uses Formie
             if (array_key_exists('verbb/formie', $require)) {
-                $jobs[] = '*/10 * * * * cd {{current_path}} && {{bin/php}} craft formie/gc/prune-data-retention-submissions';
+                $jobs[] = '5 * * * * cd {{current_path}} && {{bin/php}} craft formie/gc/prune-data-retention-submissions';
             }
         }
     }
