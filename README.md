@@ -19,7 +19,7 @@ composer require lameco/deployer-tasks --dev
 
 Loads project configuration for use in custom tasks.
 
-- Detects project type (Symfony, Craft CMS, Laravel) by checking for key files.
+- Detects project type (`symfony`, `kunstmaan`, `craftcms`, `laravel`) by checking for key files and composer packages.
 - Sets `lameco_project_type`, `lameco_dump_dir`, and `lameco_public_dir` accordingly.
 - These variables are used in default directory settings and can be overridden in your `deploy.php`.
 
@@ -37,7 +37,7 @@ Prompts to deploy all hosts with the same stage if applicable.
 
 Downloads the remote database and imports it locally.
 
-- Reads the remote `.env` file to extract DB credentials (supports Symfony, Craft CMS, Laravel formats).
+- Reads the remote `.env` file to extract DB credentials (supports Symfony, Craft CMS, Laravel formats, and `DATABASE_URL`).
 - Creates a compressed database dump on the remote server.
 - Downloads the dump to a local directory (as determined by `lameco_dump_dir`).
 - Reads the local `.env` for local DB credentials.
@@ -81,7 +81,7 @@ Builds local assets.
 
 - Loads Node.js version from `.nvmrc`.
 - Installs the correct Node.js version using nvm if not already installed.
-- Enables corepack if supported by Node.js version.
+- Enables Corepack if supported by Node.js version (Node 14.19+, 16.9+, or >16).
 - Installs dependencies with yarn.
 - Builds assets with yarn.
 
@@ -125,7 +125,7 @@ Synchronizes crontab jobs for the project.
 
 ## Parameters
 
-- `lameco_project_type`: Project type (auto-detected: `symfony`, `craftcms`, `laravel`)
+- `lameco_project_type`: Project type (auto-detected: `symfony`, `kunstmaan`, `craftcms`, `laravel`)
 - `lameco_dump_dir`: Directory for database dumps (auto-set by project type)
 - `lameco_public_dir`: Public directory (auto-set by project type)
 - `lameco_download_dirs`: Directories to download from remote (default: `['{{lameco_public_dir}}/uploads']`, plus `translations` for Craft CMS)
@@ -159,6 +159,13 @@ set('lameco_assets_dirs', ['public/build']);
 add('lameco_supervisor_configs', ['app.conf', 'queue.conf']);
 set('lameco_php_config', 'php-fpm-customuser.service');
 ```
+
+## Notes
+
+- Project type detection is automatic and supports Symfony, Kunstmaan, Craft CMS, and Laravel.
+- Database credential extraction supports `.env` formats for Symfony (`DATABASE_URL`), Craft CMS (`CRAFT_DB_*`), and Laravel (`DB_*`).
+- Asset build and upload tasks expect a working Node.js/yarn setup and `.nvmrc` file.
+- Supervisor and PHP-FPM restarts are configurable and can be disabled per project.
 
 ## License
 

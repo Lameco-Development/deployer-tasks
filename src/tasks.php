@@ -2,63 +2,10 @@
 
 namespace Deployer;
 
+require __DIR__ . '/config.php';
+require __DIR__ . '/functions.php';
+
 require 'contrib/crontab.php';
-
-// Default configuration
-set('deploy_path', '~');
-set('keep_releases', 3);
-
-set('lameco_download_dirs', function () {
-    $dirs = ['{{lameco_public_dir}}/uploads'];
-    if (get('lameco_project_type') === 'craftcms') {
-        $dirs[] = 'translations';
-    }
-    return $dirs;
-});
-
-set('lameco_upload_dirs', function () {
-    $dirs = ['{{lameco_public_dir}}/uploads'];
-    if (get('lameco_project_type') === 'craftcms') {
-        $dirs[] = 'translations';
-    }
-    return $dirs;
-});
-
-set('lameco_assets_dirs', ['{{lameco_public_dir}}/dist']);
-
-set('lameco_restart_supervisor', true);
-set('lameco_supervisor_configs', ['{{http_user}}.conf']);
-
-set('lameco_restart_php', true);
-set('lameco_php_config', 'php-fpm-{{http_user}}.service');
-
-set('crontab:jobs', function () {
-    $jobs = [];
-
-    if (get('lameco_project_type') === 'craftcms') {
-        // Check composer.json for plugins
-        $composerJsonPath = 'composer.json';
-        if (file_exists($composerJsonPath)) {
-            $composer = json_decode(file_get_contents($composerJsonPath), true, 512, JSON_THROW_ON_ERROR);
-            $require = array_merge(
-                $composer['require'] ?? [],
-                $composer['require-dev'] ?? []
-            );
-
-            // Only if project uses PutYourLightson/blitz
-            if (array_key_exists('putyourlightson/craft-blitz', $require)) {
-                $jobs[] = '5 * * * * cd {{current_path}} && {{bin/php}} craft blitz/cache/refresh-expired';
-            }
-
-            // Only if project uses Formie
-            if (array_key_exists('verbb/formie', $require)) {
-                $jobs[] = '5 * * * * cd {{current_path}} && {{bin/php}} craft formie/gc/prune-data-retention-submissions';
-            }
-        }
-    }
-
-    return $jobs;
-});
 
 // Load project configuration to use in custom tasks.
 desc('Load project configuration to use in custom tasks');
@@ -67,7 +14,12 @@ task('lameco:load', function () {
 
     // Detect project type based on key files.
     if (file_exists('bin/console') && file_exists('src/Kernel.php')) {
-        $projectType = 'symfony';
+        if (composerHasPackage('kunstmaan/admin-bundle')) {
+            $projectType = 'kunstmaan';
+        } else {
+            $projectType = 'symfony';
+        }
+
         $dumpDir = 'var';
         $publicDir = 'public';
     } elseif (file_exists('craft')) {
@@ -359,64 +311,3 @@ after('deploy:cleanup', 'lameco:restart_php');
 after('deploy:cleanup', 'lameco:restart_supervisor');
 
 after('deploy:success', 'crontab:sync');
-
-/**
- * Parse .env content into an associative array.
- */
-function fetchEnv($envContent): array
-{
-    $env = [];
-    foreach (explode("\n", $envContent) as $line) {
-        $line = trim($line);
-        if ($line === '' || str_starts_with($line, '#')) {
-            continue;
-        }
-        if (preg_match('/^([^=]+)=(?:[\'"]?)(.+?)(?:[\'"]?)$/', $line, $kv)) {
-            $env[$kv[1]] = $kv[2];
-        }
-    }
-    return $env;
-}
-
-/**
- * Extract DB credentials from env array.
- * Supports DATABASE_URL (e.g. Symfony), CRAFT_DB_* (e.g. Craft CMS), and Laravel style.
- */
-function extractDbCredentials($env): array
-{
-    if (!empty($env['DATABASE_URL'])) {
-        if (preg_match('|mysql://([^:]+):([^@]+)@[^/]+/([^?]+)|', $env['DATABASE_URL'], $dbMatch)) {
-            return [$dbMatch[1], $dbMatch[2], $dbMatch[3]];
-        }
-    } elseif (!empty($env['CRAFT_DB_DATABASE'])) {
-        return [
-            $env['CRAFT_DB_USER'] ?? null,
-            $env['CRAFT_DB_PASSWORD'] ?? null,
-            $env['CRAFT_DB_DATABASE']
-        ];
-    } elseif (!empty($env['DB_DATABASE'])) { // Fallback for Laravel style
-        return [
-            $env['DB_USER'] ?? ($env['DB_USERNAME'] ?? null),
-            $env['DB_PASSWORD'] ?? null,
-            $env['DB_DATABASE']
-        ];
-    }
-    return [null, null, null];
-}
-
-/**
- * Determine if the given Node.js version supports Corepack.
- */
-function nodeSupportsCorepack($versionString): bool
-{
-    if (preg_match('/v(\d+)\.(\d+)\.(\d+)/', $versionString, $m)) {
-        $major = (int)$m[1];
-        $minor = (int)$m[2];
-        // Corepack from 14.19+, 16.9+, or >16
-        return
-            ($major === 14 && $minor >= 19) ||
-            ($major === 16 && $minor >= 9) ||
-            ($major > 16);
-    }
-    return false;
-}
