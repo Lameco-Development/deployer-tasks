@@ -5,8 +5,8 @@ namespace Deployer;
 set('deploy_path', '~');
 set('keep_releases', 3);
 
-add('shared_dirs', function () {
-    $dirs = [];
+set('shared_dirs', function () {
+    $dirs = get('shared_dirs');
     $projectType = get('lameco_project_type');
     if (in_array($projectType, ['kunstmaan', 'craftcms'], true)) {
         $dirs[] = '{{lameco_public_dir}}/uploads';
@@ -18,8 +18,8 @@ add('shared_dirs', function () {
     return $dirs;
 });
 
-add('shared_files', function () {
-    $files = [];
+set('shared_files', function () {
+    $dirs = get('shared_files');
     $projectType = get('lameco_project_type');
     if (in_array($projectType, ['symfony', 'kunstmaan'], true)) {
         $files[] = '.env';
