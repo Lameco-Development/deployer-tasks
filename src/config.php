@@ -2,6 +2,8 @@
 
 namespace Deployer;
 
+require_once __DIR__ . '/functions.php';
+
 // Deployer
 
 set('deploy_path', '~');
