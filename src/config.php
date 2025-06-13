@@ -6,6 +6,7 @@ require_once __DIR__ . '/functions.php';
 
 // Deployer
 
+
 set('deploy_path', '~');
 set('keep_releases', 3);
 
