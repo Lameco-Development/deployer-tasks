@@ -18,7 +18,7 @@ set('shared_dirs', function () use ($sharedDirs) {
         $dirs[] = '{{lameco_public_dir}}/formie-uploads';
         $dirs[] = 'translations';
     }
-    return $dirs;
+    return array_unique($dirs);
 });
 
 $sharedFiles = get('shared_files');
@@ -28,7 +28,7 @@ set('shared_files', function () use ($sharedFiles) {
     if (in_array($projectType, ['symfony', 'kunstmaan'], true)) {
         $files[] = '.env';
     }
-    return $files;
+    return array_unique($files);
 });
 
 set('crontab:jobs', function () {
@@ -83,7 +83,7 @@ set('lameco_download_dirs', function () {
     if ($projectType === 'craftcms') {
         $dirs[] = 'translations';
     }
-    return $dirs;
+    return array_unique($dirs);
 });
 
 set('lameco_upload_dirs', function () {
@@ -95,7 +95,7 @@ set('lameco_upload_dirs', function () {
     if ($projectType === 'craftcms') {
         $dirs[] = 'translations';
     }
-    return $dirs;
+    return array_unique($dirs);
 });
 
 set('lameco_assets_dirs', ['{{lameco_public_dir}}/dist']);
