@@ -7,43 +7,6 @@ require __DIR__ . '/functions.php';
 
 require 'contrib/crontab.php';
 
-// Load project configuration to use in custom tasks.
-desc('Load project configuration to use in custom tasks');
-task('lameco:load', function () {
-    writeln('Loading project configuration...');
-
-    // Detect project type based on key files.
-    if (file_exists('bin/console') && file_exists('src/Kernel.php')) {
-        if (composerHasPackage('kunstmaan/admin-bundle')) {
-            $projectType = 'kunstmaan';
-        } else {
-            $projectType = 'symfony';
-        }
-
-        $dumpDir = 'var';
-        $publicDir = 'public';
-    } elseif (file_exists('craft')) {
-        $projectType = 'craftcms';
-        $dumpDir = 'storage';
-        $publicDir = 'web';
-    } elseif (file_exists('artisan')) {
-        $projectType = 'laravel';
-        $dumpDir = 'storage';
-        $publicDir = 'public';
-    } else {
-        throw new \RuntimeException('Unknown project type: cannot determine from current directory.');
-    }
-
-    set('lameco_project_type', $projectType);
-    writeln('Project type detected: ' . $projectType);
-
-    set('lameco_dump_dir', $dumpDir);
-    writeln('Dump directory set to: ' . $dumpDir);
-
-    set('lameco_public_dir', $publicDir);
-    writeln('Public directory set to: ' . $publicDir);
-})->once();
-
 // Prompt to deploy all hosts with the same stage if applicable
 desc('Prompt to deploy all hosts with the same stage if applicable');
 task('lameco:stage_prompt', function () {
@@ -296,13 +259,7 @@ task('lameco:restart_supervisor', function () {
     }
 });
 
-before('deploy', 'lameco:load');
 before('deploy', 'lameco:stage_prompt');
-
-before('lameco:db_download', 'lameco:load');
-before('lameco:db_credentials', 'lameco:load');
-before('lameco:download', 'lameco:load');
-before('lameco:upload', 'lameco:load');
 
 before('deploy:symlink', 'lameco:build_assets');
 after('lameco:build_assets', 'lameco:upload_assets');
