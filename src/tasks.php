@@ -2,6 +2,8 @@
 
 namespace Deployer;
 
+use Deployer\Exception\GracefulShutdownException;
+
 require_once __DIR__ . '/config.php';
 require_once __DIR__ . '/functions.php';
 
@@ -34,8 +36,9 @@ task('lameco:stage_prompt', function () {
         info('Host ' . $selectedHost->getAlias() . ' (' . $selectedHost->getHostname() . ') has stage ' . $stage);
         $confirmation = askConfirmation('Do you want to deploy to all hosts with stage ' . $stage . '?', false);
         if ($confirmation) {
-            set('selected_hosts', $hostsWithStage);
             info('Deploying to all hosts with stage ' . $stage);
+            passthru('dep deploy -n stage=' . $stage);
+            throw new GracefulShutdownException('Done deploying to all hosts');
         }
     }
 });
@@ -184,14 +187,14 @@ task('lameco:build_assets', function () {
 
     if (nodeSupportsCorepack($nodeVersion)) {
         writeln('Enabling Corepack...');
-        runLocally('corepack enable');
+        runLocally('source $HOME/.nvm/nvm.sh && corepack enable');
     }
 
     writeln('Installing dependencies...');
-    runLocally('yarn install');
+    runLocally('source $HOME/.nvm/nvm.sh && yarn install');
 
     writeln('Building assets...');
-    runLocally('yarn build');
+    runLocally('source $HOME/.nvm/nvm.sh && yarn build');
 });
 
 // Upload built assets to remote.
@@ -268,3 +271,7 @@ after('deploy:cleanup', 'lameco:restart_php');
 after('deploy:cleanup', 'lameco:restart_supervisor');
 
 after('deploy:success', 'crontab:sync');
+
+if (in_array(get('lameco_project_type'), ['symfony', 'kunstmaan'], true)) {
+    before('deploy:symlink', 'database:migrate');
+}
