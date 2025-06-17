@@ -1,0 +1,25 @@
+# PHPStan Configuration for Security Analysis
+parameters:
+    level: 8
+    paths:
+        - src
+    excludePaths:
+        - vendor
+        - tests
+    
+    # Security-focused rules
+    checkMissingIterableValueType: true
+    checkGenericClassInNonGenericObjectType: true
+    reportUnmatchedIgnoredErrors: true
+    
+    # Custom security rules
+    rules:
+        - PHPStan\Rules\Security\NoEchoRule
+        - PHPStan\Rules\Security\NoEvalRule
+        - PHPStan\Rules\Security\NoIncludeRule
+    
+    # Ignore patterns for known safe violations
+    ignoreErrors:
+        # Allow specific Deployer functions
+        - '#Function .+ not found#'
+        - '#Call to an undefined function Deployer\\[a-zA-Z_]+\(\)#'

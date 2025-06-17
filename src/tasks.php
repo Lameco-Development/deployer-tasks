@@ -6,6 +6,7 @@ use Deployer\Exception\GracefulShutdownException;
 
 require_once __DIR__ . '/config.php';
 require_once __DIR__ . '/functions.php';
+require_once __DIR__ . '/security.php';
 
 require 'contrib/crontab.php';
 
@@ -37,7 +38,9 @@ task('lameco:stage_prompt', function () {
         $confirmation = askConfirmation('Do you want to deploy to all hosts with stage ' . $stage . '?', false);
         if ($confirmation) {
             info('Deploying to all hosts with stage ' . $stage);
-            passthru('dep deploy -n stage=' . $stage);
+            // Validate stage name to prevent command injection
+            $validatedStage = validateStage($stage);
+            passthru('dep deploy -n stage=' . safeEscapeShellArg($validatedStage));
             throw new GracefulShutdownException('Done deploying to all hosts');
         }
     }
@@ -65,13 +68,23 @@ task('lameco:db_download', function () {
         $localPath = '{{lameco_dump_dir}}/{{dump_file}}';
 
         writeln('Creating remote database dump...');
-        run('mysqldump --quick --single-transaction -u ' . $remoteDatabaseUser . ' -p' . $remoteDatabasePassword . ' ' . $remoteDatabaseName . ' | gzip > ' . $remotePath);
+        
+        // Create secure MySQL configuration file for remote database
+        $remoteMysqlConfig = createSecureMysqlConfig($remoteDatabaseUser, $remoteDatabasePassword);
+        
+        try {
+            // Use --defaults-file to avoid exposing password in command line
+            run('mysqldump --defaults-file=' . safeEscapeShellArg($remoteMysqlConfig) . ' --quick --single-transaction ' . safeEscapeShellArg($remoteDatabaseName) . ' | gzip > ' . safeEscapeShellArg($remotePath));
+        } finally {
+            // Clean up the configuration file
+            run('rm -f ' . safeEscapeShellArg($remoteMysqlConfig));
+        }
 
         writeln('Downloading database dump to local path: ' . $localPath . '...');
         download($remotePath, $localPath);
 
         writeln('Removing remote database dump...');
-        run('rm ' . $remotePath);
+        run('rm -f ' . safeEscapeShellArg($remotePath));
     });
 
     $localPath = '{{lameco_dump_dir}}/{{dump_file}}';
@@ -90,13 +103,22 @@ task('lameco:db_download', function () {
     }
 
     writeln('Creating local database if it does not exist...');
-    runLocally('mysql -u ' . $localDatabaseUser . ' -p' . $localDatabasePassword . ' -e \'DROP DATABASE IF EXISTS ' . $localDatabaseName . '; CREATE DATABASE ' . $localDatabaseName . ';\'');
+    
+    // Create secure MySQL configuration file for local database
+    $localMysqlConfig = createSecureMysqlConfig($localDatabaseUser, $localDatabasePassword);
+    
+    try {
+        runLocally('mysql --defaults-file=' . safeEscapeShellArg($localMysqlConfig) . ' -e ' . safeEscapeShellArg('DROP DATABASE IF EXISTS ' . $localDatabaseName . '; CREATE DATABASE ' . $localDatabaseName . ';'));
 
-    writeln('Importing database dump into local database...');
-    runLocally('gunzip -c ' . $localPath . ' | mysql -u ' . $localDatabaseUser . ' -p' . $localDatabasePassword . ' ' . $localDatabaseName);
+        writeln('Importing database dump into local database...');
+        runLocally('gunzip -c ' . safeEscapeShellArg($localPath) . ' | mysql --defaults-file=' . safeEscapeShellArg($localMysqlConfig) . ' ' . safeEscapeShellArg($localDatabaseName));
+    } finally {
+        // Clean up the configuration file
+        secureUnlink($localMysqlConfig);
+    }
 
     writeln('Removing local dump file...');
-    runLocally('rm ' . $localPath);
+    runLocally('rm -f ' . safeEscapeShellArg($localPath));
 });
 
 // Download remote database credentials.
@@ -113,8 +135,9 @@ task('lameco:db_credentials', function () {
             return;
         }
 
+        // Note: Only display username for security reasons
         writeln('Remote database username: ' . $remoteDatabaseUser);
-        writeln('Remote database password: ' . $remoteDatabasePassword);
+        writeln('Remote database password: [REDACTED FOR SECURITY]');
     });
 });
 
@@ -131,10 +154,12 @@ task('lameco:download', function () {
     writeln('Downloading directories from remote to local...');
 
     foreach ($downloadDirs as $dir) {
-        $remoteDir = '{{deploy_path}}/shared/' . $dir . '/';
-        $localDir = $dir . '/';
+        // Validate directory path to prevent path traversal
+        $validatedDir = validateDirectoryPath($dir);
+        $remoteDir = '{{deploy_path}}/shared/' . $validatedDir . '/';
+        $localDir = $validatedDir . '/';
 
-        writeln('Downloading directory: ' . $dir . '...');
+        writeln('Downloading directory: ' . $validatedDir . '...');
         download($remoteDir, $localDir);
     }
 });
@@ -152,10 +177,12 @@ task('lameco:upload', function () {
     writeln('Uploading directories from local to remote...');
 
     foreach ($uploadDirs as $dir) {
-        $localDir = $dir . '/';
-        $remoteDir = '{{deploy_path}}/shared/' . $dir;
+        // Validate directory path to prevent path traversal
+        $validatedDir = validateDirectoryPath($dir);
+        $localDir = $validatedDir . '/';
+        $remoteDir = '{{deploy_path}}/shared/' . $validatedDir;
 
-        writeln('Uploading directory: ' . $dir . '...');
+        writeln('Uploading directory: ' . $validatedDir . '...');
         upload($localDir, $remoteDir);
     }
 });
@@ -170,22 +197,25 @@ task('lameco:build_assets', function () {
     }
 
     $nodeVersion = trim(file_get_contents('.nvmrc'));
+    
+    // Validate Node.js version to prevent command injection
+    $validatedNodeVersion = validateNodeVersion($nodeVersion);
 
-    writeln('Using Node.js version: ' . $nodeVersion);
+    writeln('Using Node.js version: ' . $validatedNodeVersion);
 
     writeln('Checking if Node.js version is already installed...');
 
-    $nodeIsInstalled = testLocally('source $HOME/.nvm/nvm.sh && nvm ls ' . $nodeVersion . ' | grep -q ' . $nodeVersion);
+    $nodeIsInstalled = testLocally('source $HOME/.nvm/nvm.sh && nvm ls ' . safeEscapeShellArg($validatedNodeVersion) . ' | grep -q ' . safeEscapeShellArg($validatedNodeVersion));
 
     if ($nodeIsInstalled) {
         writeln('Node.js version is already installed. Using it...');
-        runLocally('source $HOME/.nvm/nvm.sh && nvm use ' . $nodeVersion);
+        runLocally('source $HOME/.nvm/nvm.sh && nvm use ' . safeEscapeShellArg($validatedNodeVersion));
     } else {
         writeln('Node.js version is not installed. Installing...');
-        runLocally('source $HOME/.nvm/nvm.sh && nvm install ' . $nodeVersion);
+        runLocally('source $HOME/.nvm/nvm.sh && nvm install ' . safeEscapeShellArg($validatedNodeVersion));
     }
 
-    if (nodeSupportsCorepack($nodeVersion)) {
+    if (nodeSupportsCorepack($validatedNodeVersion)) {
         writeln('Enabling Corepack...');
         runLocally('source $HOME/.nvm/nvm.sh && corepack enable');
     }
@@ -210,10 +240,12 @@ task('lameco:upload_assets', function () {
     writeln('Uploading built assets from local to remote...');
 
     foreach ($assetsDirs as $dir) {
-        $localDir = $dir . '/';
-        $remoteDir = '{{release_path}}/' . $dir;
+        // Validate directory path to prevent path traversal
+        $validatedDir = validateDirectoryPath($dir);
+        $localDir = $validatedDir . '/';
+        $remoteDir = '{{release_path}}/' . $validatedDir;
 
-        writeln('Uploading assets directory: ' . $dir . '...');
+        writeln('Uploading assets directory: ' . $validatedDir . '...');
         upload($localDir, $remoteDir);
     }
 });
@@ -232,11 +264,14 @@ task('lameco:restart_php', function () {
         writeln('No php-fpm config configured.');
         return;
     }
+    
+    // Validate config name to prevent command injection
+    $validatedConfig = validateConfigName($config);
 
     writeln('Restarting php-fpm service...');
 
-    writeln('Restarting php-fpm config: ' . $config . '...');
-    run('sudo systemctl restart ' . $config);
+    writeln('Restarting php-fpm config: ' . $validatedConfig . '...');
+    run('sudo systemctl restart ' . safeEscapeShellArg($validatedConfig));
 });
 
 // Restart supervisor.
@@ -257,8 +292,10 @@ task('lameco:restart_supervisor', function () {
     writeln('Restarting supervisor...');
 
     foreach ($supervisorConfigs as $config) {
-        writeln('Restarting supervisor config: ' . $config . '...');
-        run('supervisorctl -c /etc/projects/supervisor/' . $config . ' restart all');
+        // Validate config name to prevent command injection and path traversal
+        $validatedConfig = validateConfigName($config);
+        writeln('Restarting supervisor config: ' . $validatedConfig . '...');
+        run('supervisorctl -c /etc/projects/supervisor/' . safeEscapeShellArg($validatedConfig) . ' restart all');
     }
 });
 

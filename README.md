@@ -2,6 +2,17 @@
 
 A collection of common tasks for [Deployer](https://deployer.org/) to streamline deployment workflows.
 
+## Security
+
+This package implements several security measures to prevent common vulnerabilities:
+
+- **Command Injection Prevention**: All shell arguments are properly escaped
+- **Input Validation**: Configuration values are validated and sanitized  
+- **Secure Credential Handling**: Database passwords use secure configuration files
+- **Path Traversal Protection**: Directory paths are validated against malicious patterns
+
+For detailed security information, see [SECURITY.md](SECURITY.md).
+
 ## Requirements
 
 - PHP 8.4 or higher
