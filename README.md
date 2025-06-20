@@ -92,7 +92,8 @@ Builds local assets.
 Uploads built assets to remote.
 
 - Uploads each directory in `lameco_assets_dirs` from local to `{{release_path}}` on the remote.
-- Default: uploads `['{{lameco_public_dir}}/dist']`.
+- Uploads each file in `lameco_assets_files` from local to `{{release_path}}` on the remote.
+- Default: uploads `['{{lameco_public_dir}}/dist']` for directories, empty array for files.
 
 ---
 
@@ -131,6 +132,7 @@ Synchronizes crontab jobs for the project.
 - `lameco_download_dirs`: Directories to download from remote (default: `['{{lameco_public_dir}}/uploads']`, plus `translations` for Craft CMS)
 - `lameco_upload_dirs`: Directories to upload to remote (default: `['{{lameco_public_dir}}/uploads']`, plus `translations` for Craft CMS)
 - `lameco_assets_dirs`: Asset directories to upload (default: `['{{lameco_public_dir}}/dist']`)
+- `lameco_assets_files`: Asset files to upload (default: `[]`)
 - `lameco_restart_php`: Enable/disable PHP-FPM restart (default: true)
 - `lameco_php_config`: PHP-FPM systemd service name (default: `php-fpm-{{http_user}}.service`)
 - `lameco_restart_supervisor`: Enable/disable supervisor restart (default: true)
