@@ -277,6 +277,56 @@ task('lameco:restart_supervisor', function () {
     }
 });
 
+// Clean up Blitz cache from old releases for Craft CMS projects.
+desc('Clean up Blitz cache from old releases for Craft CMS projects');
+task('lameco:cleanup_blitz_cache', function () {
+    // Only run for Craft CMS projects
+    if (get('lameco_project_type') !== 'craftcms') {
+        return;
+    }
+
+    // Check if cleanup is enabled (default: true for Craft CMS)
+    if (!get('lameco_cleanup_blitz_cache', true)) {
+        writeln('Blitz cache cleanup is disabled.');
+        return;
+    }
+
+    writeln('Cleaning up Blitz cache from old releases...');
+
+    // Get the current release name and all releases
+    $currentRelease = basename(run('readlink {{deploy_path}}/current'));
+    $releases = explode("\n", run('ls -1 {{deploy_path}}/releases'));
+    
+    // Filter out empty entries and the current release
+    $oldReleases = array_filter($releases, function($release) use ($currentRelease) {
+        return !empty(trim($release)) && trim($release) !== $currentRelease;
+    });
+
+    if (empty($oldReleases)) {
+        writeln('No old releases found to clean up.');
+        return;
+    }
+
+    $cleanedCount = 0;
+    foreach ($oldReleases as $release) {
+        $release = trim($release);
+        $blitzCachePath = "{{deploy_path}}/releases/{$release}/{{lameco_public_dir}}/cache/blitz";
+        
+        // Check if the Blitz cache directory exists before attempting to remove it
+        if (test("[ -d {$blitzCachePath} ]")) {
+            writeln("Removing Blitz cache from release: {$release}");
+            run("rm -rf {$blitzCachePath}");
+            $cleanedCount++;
+        }
+    }
+
+    if ($cleanedCount > 0) {
+        writeln("Successfully cleaned Blitz cache from {$cleanedCount} old release(s).");
+    } else {
+        writeln('No Blitz cache directories found in old releases.');
+    }
+});
+
 before('deploy', 'lameco:stage_prompt');
 
 before('deploy:symlink', 'lameco:build_assets');
@@ -286,6 +336,7 @@ after('deploy:cleanup', 'lameco:restart_php');
 after('deploy:cleanup', 'lameco:restart_supervisor');
 
 after('deploy:success', 'crontab:sync');
+after('deploy:success', 'lameco:cleanup_blitz_cache');
 
 if (in_array(get('lameco_project_type'), ['symfony', 'kunstmaan'], true)) {
     before('deploy:symlink', 'database:migrate');
