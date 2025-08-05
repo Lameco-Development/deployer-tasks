@@ -209,6 +209,32 @@ set('lameco_auto_detect_cron', false);
 - Asset build and upload tasks expect a working Node.js/yarn setup and `.nvmrc` file.
 - Supervisor and PHP-FPM restarts are configurable and can be disabled per project.
 
+## Migration from Fixed Cron Jobs
+
+If you were relying on automatic Craft CMS package detection (Blitz, Formie), you have several options:
+
+### Option 1: Keep auto-detection (default behavior)
+No changes needed. The system will continue to automatically detect and configure cron jobs for supported packages.
+
+### Option 2: Define custom jobs and keep auto-detection
+```php
+// Your custom jobs + auto-detected jobs will both be included
+set('lameco_cron_jobs', [
+    ['*/5 * * * *', 'php artisan horizon:snapshot'],
+]);
+```
+
+### Option 3: Replace auto-detection with explicit jobs
+```php
+// Disable auto-detection and define all jobs explicitly
+set('lameco_auto_detect_cron', false);
+set('lameco_cron_jobs', [
+    ['5 * * * *', 'php craft blitz/cache/refresh-expired'],   // Previously auto-detected
+    ['5 * * * *', 'php craft formie/gc/prune-data-retention-submissions'], // Previously auto-detected
+    ['* * * * *', 'php craft queue/run'],                     // Your custom job
+]);
+```
+
 ## License
 
 This package is open-sourced software licensed under the MIT license.
