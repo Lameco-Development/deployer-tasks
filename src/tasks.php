@@ -9,9 +9,24 @@ require_once __DIR__ . '/functions.php';
 
 require 'contrib/crontab.php';
 
+// Load project configuration for use in custom tasks
+desc('Load project configuration for use in custom tasks');
+task('lameco:load', function () {
+    // This task ensures that project configuration is loaded
+    // The actual configuration happens in config.php when this file is included
+    info('Lameco project type: ' . get('lameco_project_type'));
+    info('Dump directory: ' . get('lameco_dump_dir'));
+    info('Public directory: ' . get('lameco_public_dir'));
+});
+
 // Prompt to deploy all hosts with the same stage if applicable
 desc('Prompt to deploy all hosts with the same stage if applicable');
 task('lameco:stage_prompt', function () {
+    // Skip if we're already deploying to a stage (prevent infinite recursion)
+    if (getenv('LAMECO_STAGE_DEPLOYMENT') === '1') {
+        return;
+    }
+    
     $selectedHost = currentHost();
     if (!$selectedHost) {
         return;
@@ -31,13 +46,18 @@ task('lameco:stage_prompt', function () {
         }
     }
 
-    // Only prompt if there are multiple hosts with this stage and not all are already selected.
-    if (count($hostsWithStage) > 1 && count($allHosts) !== count($hostsWithStage)) {
+    // Only prompt if there are multiple hosts with this stage and we're not deploying to all of them
+    // The original logic was checking if all hosts != hosts with stage, but we need to check
+    // if we're deploying to just one host when there are multiple hosts with the same stage
+    if (count($hostsWithStage) > 1) {
         info('Host ' . $selectedHost->getAlias() . ' (' . $selectedHost->getHostname() . ') has stage ' . $stage);
+        info('Found ' . count($hostsWithStage) . ' hosts with stage ' . $stage . ': ' . implode(', ', $hostsWithStage));
         $confirmation = askConfirmation('Do you want to deploy to all hosts with stage ' . $stage . '?', false);
         if ($confirmation) {
             info('Deploying to all hosts with stage ' . $stage);
-            passthru('dep deploy -n stage=' . $stage);
+            // Set flag to prevent infinite recursion
+            putenv('LAMECO_STAGE_DEPLOYMENT=1');
+            passthru('dep deploy stage=' . $stage);
             throw new GracefulShutdownException('Done deploying to all hosts');
         }
     }
@@ -277,7 +297,13 @@ task('lameco:restart_supervisor', function () {
     }
 });
 
+before('deploy', 'lameco:load');
 before('deploy', 'lameco:stage_prompt');
+
+before('lameco:db_download', 'lameco:load');
+before('lameco:db_credentials', 'lameco:load');
+before('lameco:download', 'lameco:load');
+before('lameco:upload', 'lameco:load');
 
 before('deploy:symlink', 'lameco:build_assets');
 after('lameco:build_assets', 'lameco:upload_assets');
