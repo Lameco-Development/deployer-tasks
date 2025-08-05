@@ -25,6 +25,17 @@ Loads project configuration for use in custom tasks.
 
 ---
 
+### lameco:branch_check
+
+Verifies that the local branch matches the deployment branch before deploying.
+
+- Compares the current local branch with the deployment branch specified by the host configuration.
+- Halts the deployment process if branches do not match to prevent asset-code mismatches.
+- This ensures that locally built assets correspond to the exact code of the branch being deployed.
+- The deployment branch is read from the host's `branch` configuration or the global `branch` setting.
+
+---
+
 ### lameco:stage_prompt
 
 Prompts to deploy all hosts with the same stage if applicable.
@@ -142,6 +153,7 @@ Synchronizes crontab jobs for the project.
 ## Task Dependencies
 
 - `lameco:load` runs before `deploy`
+- `lameco:branch_check` runs before `deploy` and after `lameco:load`
 - `lameco:stage_prompt` runs before `deploy`
 - `lameco:db_download`, `lameco:db_credentials`, `lameco:download`, and `lameco:upload` depend on `lameco:load`
 - `lameco:build_assets` runs before `deploy:symlink`
@@ -165,6 +177,7 @@ set('lameco_php_config', 'php-fpm-customuser.service');
 ## Notes
 
 - Project type detection is automatic and supports Symfony, Kunstmaan, Craft CMS, and Laravel.
+- Branch verification ensures that locally built assets match the deployment branch, preventing asset-code mismatches.
 - Database credential extraction supports `.env` formats for Symfony (`DATABASE_URL`), Craft CMS (`CRAFT_DB_*`), and Laravel (`DB_*`).
 - Asset build and upload tasks expect a working Node.js/yarn setup and `.nvmrc` file.
 - Supervisor and PHP-FPM restarts are configurable and can be disabled per project.
