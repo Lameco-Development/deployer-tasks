@@ -9,6 +9,58 @@ require_once __DIR__ . '/functions.php';
 
 require 'contrib/crontab.php';
 
+// Load project configuration for use in custom tasks
+desc('Load project configuration for use in custom tasks');
+task('lameco:load', function () {
+    // Project type detection and configuration is handled in config.php
+    // This task exists for dependency purposes and to ensure config is loaded
+    $projectType = get('lameco_project_type');
+    writeln('Project type detected: <info>' . $projectType . '</info>');
+});
+
+// Check if local branch matches deployment branch before deploying
+desc('Check if local branch matches deployment branch before deploying');
+task('lameco:branch_check', function () {
+    $currentHost = currentHost();
+    if (!$currentHost) {
+        return;
+    }
+
+    // Get the current local branch
+    $localBranch = trim(runLocally('git rev-parse --abbrev-ref HEAD'));
+    
+    // Get the deployment branch from host configuration
+    // In Deployer, the branch is typically set via the 'branch' option or defaults to the repository default
+    $deploymentBranch = $currentHost->get('branch') ?? get('branch') ?? null;
+    
+    // If no deployment branch is configured, skip the check
+    if (!$deploymentBranch) {
+        writeln('<comment>No deployment branch configured for host ' . $currentHost->getAlias() . '. Skipping branch check.</comment>');
+        return;
+    }
+    
+    writeln('Local branch: <info>' . $localBranch . '</info>');
+    writeln('Deployment branch: <info>' . $deploymentBranch . '</info>');
+    
+    // Compare branches
+    if ($localBranch !== $deploymentBranch) {
+        $message = sprintf(
+            'Branch mismatch detected!%sLocal branch: %s%sDeployment branch: %s%s%sAssets are built locally and must correspond to the exact code of the branch being deployed.%sPlease switch to the correct branch or update the deployment configuration.',
+            PHP_EOL,
+            $localBranch,
+            PHP_EOL,
+            $deploymentBranch,
+            PHP_EOL,
+            PHP_EOL,
+            PHP_EOL
+        );
+        
+        throw new \RuntimeException($message);
+    }
+    
+    writeln('<info>✓ Local branch matches deployment branch.</info>');
+});
+
 // Prompt to deploy all hosts with the same stage if applicable
 desc('Prompt to deploy all hosts with the same stage if applicable');
 task('lameco:stage_prompt', function () {
@@ -277,7 +329,14 @@ task('lameco:restart_supervisor', function () {
     }
 });
 
+before('deploy', 'lameco:load');
+before('deploy', 'lameco:branch_check');
 before('deploy', 'lameco:stage_prompt');
+
+before('lameco:db_download', 'lameco:load');
+before('lameco:db_credentials', 'lameco:load');
+before('lameco:download', 'lameco:load');
+before('lameco:upload', 'lameco:load');
 
 before('deploy:symlink', 'lameco:build_assets');
 after('lameco:build_assets', 'lameco:upload_assets');
