@@ -119,8 +119,36 @@ Restarts supervisor.
 
 Synchronizes crontab jobs for the project.
 
-- Automatically sets up crontab jobs based on project type and detected plugins (e.g., Craft CMS with Blitz or Formie).
-- Jobs are defined in the `crontab:jobs` configuration, which is dynamically generated for Craft CMS projects.
+- Supports both automatic detection of Craft CMS packages (legacy mode) and user-defined cron jobs.
+- User-defined jobs are configured via the `lameco_cron_jobs` parameter in your `deploy.php`.
+- Automatically prepends `cd {{current_path}} &&` to commands for proper working directory handling.
+- Jobs can be defined in multiple formats for flexibility.
+
+**User-defined cron job formats:**
+
+```php
+// Array format: [schedule, command]
+set('lameco_cron_jobs', [
+    ['* * * * *', 'php craft queue/run'],
+    ['0 2 * * *', 'php craft gc'],
+    ['*/5 * * * *', 'php artisan schedule:run'],
+]);
+
+// String format: 'schedule command'
+set('lameco_cron_jobs', [
+    '* * * * * php craft queue/run',
+    '0 2 * * * php craft gc',
+    '*/5 * * * * php artisan schedule:run',
+]);
+
+// Mixed format
+set('lameco_cron_jobs', [
+    ['* * * * *', 'php craft queue/run'],
+    '0 2 * * * php craft gc',
+]);
+```
+
+**Legacy auto-detection:** If no custom jobs are defined, the system automatically detects Craft CMS packages (Blitz, Formie) and creates appropriate cron jobs for backward compatibility.
 
 ---
 
@@ -137,6 +165,8 @@ Synchronizes crontab jobs for the project.
 - `lameco_php_config`: PHP-FPM systemd service name (default: `php-fpm-{{http_user}}.service`)
 - `lameco_restart_supervisor`: Enable/disable supervisor restart (default: true)
 - `lameco_supervisor_configs`: Supervisor config files (default: `[get('http_user') . '.conf']`)
+- `lameco_cron_jobs`: User-defined cron jobs array (default: `[]`)
+- `lameco_auto_detect_cron`: Enable/disable automatic Craft CMS package detection for cron jobs (default: true)
 - `http_user`: User running PHP-FPM or supervisor
 
 ## Task Dependencies
@@ -160,6 +190,16 @@ require 'vendor/lameco/deployer-tasks/src/tasks.php';
 set('lameco_assets_dirs', ['public/build']);
 add('lameco_supervisor_configs', ['app.conf', 'queue.conf']);
 set('lameco_php_config', 'php-fpm-customuser.service');
+
+// Define custom cron jobs (replaces automatic package detection)
+set('lameco_cron_jobs', [
+    ['* * * * *', 'php craft queue/run'],
+    ['0 2 * * *', 'php craft gc'],
+    ['*/15 * * * *', 'php artisan schedule:run'],
+]);
+
+// Or disable auto-detection while keeping custom jobs
+set('lameco_auto_detect_cron', false);
 ```
 
 ## Notes
