@@ -47,20 +47,6 @@ set('crontab:jobs', function () {
     return $jobs;
 });
 
-set('crontab:jobs', function () {
-    $jobs = [];
-
-    if (composerHasPackage('putyourlightson/craft-blitz')) {
-        $jobs[] = '5 * * * * cd {{current_path}} && {{bin/php}} craft blitz/cache/refresh-expired';
-    }
-
-    if (composerHasPackage('verbb/formie')) {
-        $jobs[] = '5 * * * * cd {{current_path}} && {{bin/php}} craft formie/gc/prune-data-retention-submissions';
-    }
-
-    return $jobs;
-});
-
 
 // Laméco
 
