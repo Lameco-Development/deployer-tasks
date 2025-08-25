@@ -201,20 +201,35 @@ task('lameco:build_assets', function () {
 desc('Upload built assets to remote');
 task('lameco:upload_assets', function () {
     $assetsDirs = get('lameco_assets_dirs');
+    $assetsFiles = get('lameco_assets_files');
 
-    if (empty($assetsDirs)) {
-        writeln('No assets directories configured.');
+    if (empty($assetsDirs) && empty($assetsFiles)) {
+        writeln('No assets directories or files configured.');
         return;
     }
 
     writeln('Uploading built assets from local to remote...');
 
-    foreach ($assetsDirs as $dir) {
-        $localDir = $dir . '/';
-        $remoteDir = '{{release_path}}/' . $dir;
+    // Upload directories
+    if (!empty($assetsDirs)) {
+        foreach ($assetsDirs as $dir) {
+            $localDir = $dir . '/';
+            $remoteDir = '{{release_path}}/' . $dir;
 
-        writeln('Uploading assets directory: ' . $dir . '...');
-        upload($localDir, $remoteDir);
+            writeln('Uploading assets directory: ' . $dir . '...');
+            upload($localDir, $remoteDir);
+        }
+    }
+
+    // Upload individual files
+    if (!empty($assetsFiles)) {
+        foreach ($assetsFiles as $file) {
+            $localFile = $file;
+            $remoteFile = '{{release_path}}/' . $file;
+
+            writeln('Uploading assets file: ' . $file . '...');
+            upload($localFile, $remoteFile);
+        }
     }
 });
 
