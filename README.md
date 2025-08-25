@@ -84,6 +84,7 @@ Builds local assets.
 - Enables Corepack if supported by Node.js version (Node 14.19+, 16.9+, or >16).
 - Installs dependencies with yarn.
 - Builds assets with yarn.
+- Appends any flags set in `lameco_assets_build_flags` to the yarn build command.
 
 ---
 
@@ -133,6 +134,7 @@ Synchronizes crontab jobs for the project.
 - `lameco_upload_dirs`: Directories to upload to remote (default: `['{{lameco_public_dir}}/uploads']`, plus `translations` for Craft CMS)
 - `lameco_assets_dirs`: Asset directories to upload (default: `['{{lameco_public_dir}}/dist']`)
 - `lameco_assets_files`: Asset files to upload (default: `[]`)
+- `lameco_assets_build_flags`: Extra flags to append to the yarn build command (default: `[]`)
 - `lameco_restart_php`: Enable/disable PHP-FPM restart (default: true)
 - `lameco_php_config`: PHP-FPM systemd service name (default: `php-fpm-{{http_user}}.service`)
 - `lameco_restart_supervisor`: Enable/disable supervisor restart (default: true)
@@ -172,4 +174,3 @@ set('lameco_php_config', 'php-fpm-customuser.service');
 ## License
 
 This package is open-sourced software licensed under the MIT license.
-

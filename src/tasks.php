@@ -194,7 +194,7 @@ task('lameco:build_assets', function () {
     runLocally('source $HOME/.nvm/nvm.sh && yarn install');
 
     writeln('Building assets...');
-    runLocally('source $HOME/.nvm/nvm.sh && yarn build');
+    runLocally('source $HOME/.nvm/nvm.sh && yarn build ' . get('lameco_assets_build_flags'));
 });
 
 // Upload built assets to remote.
