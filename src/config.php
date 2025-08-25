@@ -189,6 +189,7 @@ set('lameco_upload_dirs', function () {
 
 set('lameco_assets_dirs', ['{{lameco_public_dir}}/dist']);
 set('lameco_assets_files', []);
+set('lameco_assets_build_flags', '');
 
 set('lameco_restart_supervisor', true);
 set('lameco_supervisor_configs', ['{{http_user}}.conf']);
