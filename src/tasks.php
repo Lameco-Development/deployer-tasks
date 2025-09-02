@@ -286,13 +286,13 @@ task('lameco:update_htpasswd', function () {
     }
 
     // Check if this is a staging environment
-    $stage = $selectedHost->getLabels()['stage'] ?? null;
-    if ($stage !== 'staging') {
+    if (strpos($selectedHost, 'staging') === false) {
         writeln('Skipping .htpasswd update - not a staging environment.');
         return;
     }
 
     $httpUser = get('http_user');
+
     if (!$httpUser) {
         error('http_user variable is not set.');
         return;
@@ -316,24 +316,9 @@ task('lameco:update_htpasswd', function () {
     // Check if the file exists and if the entry is already correct
     $fileExists = test('[ -f "' . $htpasswdPath . '" ]');
     
-    if ($fileExists) {
-        // Check if the current entry matches
-        $currentContent = run('cat ' . $htpasswdPath . ' 2>/dev/null || echo ""');
-        if (trim($currentContent) === $htpasswdEntry) {
-            writeln('.htpasswd is already up-to-date.');
-            return;
-        }
-        
-        writeln('Updating existing .htpasswd file...');
-    } else {
-        writeln('Creating new .htpasswd file...');
-    }
-    
     // Write the .htpasswd entry
-    run('echo "' . $htpasswdEntry . '" > ' . $htpasswdPath);
-    
+    run('echo \'' . $htpasswdEntry . '\' > ' . $htpasswdPath);
     writeln('.htpasswd updated successfully at: ' . $htpasswdPath);
-    writeln('Credentials: ' . $username . ' : ' . $httpUser);
 });
 
 before('deploy', 'lameco:stage_prompt');
