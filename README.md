@@ -125,6 +125,18 @@ Synchronizes crontab jobs for the project.
 
 ---
 
+### lameco:update_htpasswd
+
+Updates .htpasswd file for staging environments.
+
+- Automatically checks if the current hostname contains "staging".
+- If it's a staging environment, creates or updates the `.htpasswd` file at `/projects/{{http_user}}/.local/nginx/.htpasswd`.
+- Sets the username to `lameco` and uses the `http_user` value as the password, hashed with bcrypt.
+- Uses `mkpasswd -m bcrypt` to generate the password hash as recommended by Rootnet.
+- Skips the update if the `.htpasswd` file is already up-to-date.
+
+---
+
 ## Parameters
 
 - `lameco_project_type`: Project type (auto-detected: `symfony`, `kunstmaan`, `craftcms`, `laravel`)
@@ -149,7 +161,7 @@ Synchronizes crontab jobs for the project.
 - `lameco:build_assets` runs before `deploy:symlink`
 - `lameco:upload_assets` runs after `lameco:build_assets`
 - `lameco:restart_php` and `lameco:restart_supervisor` run after `deploy:cleanup`
-- `crontab:sync` runs after `deploy:success`
+- `crontab:sync` and `lameco:update_htpasswd` run after `deploy:success`
 
 ## Usage
 

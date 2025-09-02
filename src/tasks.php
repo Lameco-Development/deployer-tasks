@@ -277,6 +277,50 @@ task('lameco:restart_supervisor', function () {
     }
 });
 
+// Update .htpasswd for staging environments.
+desc('Update .htpasswd for staging environments');
+task('lameco:update_htpasswd', function () {
+    $selectedHost = currentHost();
+    if (!$selectedHost) {
+        return;
+    }
+
+    // Check if this is a staging environment
+    if (strpos($selectedHost, 'staging') === false) {
+        writeln('Skipping .htpasswd update - not a staging environment.');
+        return;
+    }
+
+    $httpUser = get('http_user');
+
+    if (!$httpUser) {
+        error('http_user variable is not set.');
+        return;
+    }
+
+    writeln('Updating .htpasswd for staging environment...');
+    
+    $htpasswdPath = '/projects/' . $httpUser . '/.local/nginx/.htpasswd';
+    $username = 'lameco';
+    
+    // Generate bcrypt hash of the http_user (password)
+    writeln('Generating bcrypt hash for password...');
+    $hashedPassword = run('mkpasswd -m bcrypt "' . $httpUser . '"');
+    
+    // Ensure the directory exists
+    run('mkdir -p /projects/' . $httpUser . '/.local/nginx');
+    
+    // Create or update the .htpasswd file
+    $htpasswdEntry = $username . ':' . trim($hashedPassword);
+    
+    // Check if the file exists and if the entry is already correct
+    $fileExists = test('[ -f "' . $htpasswdPath . '" ]');
+    
+    // Write the .htpasswd entry
+    run('echo \'' . $htpasswdEntry . '\' > ' . $htpasswdPath);
+    writeln('.htpasswd updated successfully at: ' . $htpasswdPath);
+});
+
 before('deploy', 'lameco:stage_prompt');
 
 before('deploy:symlink', 'lameco:build_assets');
@@ -286,6 +330,7 @@ after('deploy:cleanup', 'lameco:restart_php');
 after('deploy:cleanup', 'lameco:restart_supervisor');
 
 after('deploy:success', 'crontab:sync');
+after('deploy:success', 'lameco:update_htpasswd');
 
 if (in_array(get('lameco_project_type'), ['symfony', 'kunstmaan'], true)) {
     before('deploy:symlink', 'database:migrate');
