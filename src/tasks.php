@@ -285,10 +285,9 @@ task('lameco:update_htpasswd', function () {
         return;
     }
 
-    $hostname = $selectedHost->getHostname();
-    
     // Check if this is a staging environment
-    if (strpos($hostname, 'staging') === false) {
+    $stage = $selectedHost->getLabels()['stage'] ?? null;
+    if ($stage !== 'staging') {
         writeln('Skipping .htpasswd update - not a staging environment.');
         return;
     }
@@ -334,7 +333,7 @@ task('lameco:update_htpasswd', function () {
     run('echo "' . $htpasswdEntry . '" > ' . $htpasswdPath);
     
     writeln('.htpasswd updated successfully at: ' . $htpasswdPath);
-    writeln('Username: ' . $username);
+    writeln('Credentials: ' . $username . ' : ' . $httpUser);
 });
 
 before('deploy', 'lameco:stage_prompt');
