@@ -218,6 +218,9 @@ task('lameco:upload_assets', function () {
 
             writeln('Uploading assets directory: ' . $dir . '...');
             upload($localDir, $remoteDir);
+            
+            writeln('Setting permissions to at least 644 for files in: ' . $dir . '...');
+            run('find {{release_path}}/' . $dir . ' -type f -exec chmod 644 {} +');
         }
     }
 
@@ -229,6 +232,9 @@ task('lameco:upload_assets', function () {
 
             writeln('Uploading assets file: ' . $file . '...');
             upload($localFile, $remoteFile);
+            
+            writeln('Setting permissions to 644 for file: ' . $file . '...');
+            run('chmod 644 {{release_path}}/' . $file);
         }
     }
 });
