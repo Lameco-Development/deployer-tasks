@@ -196,7 +196,9 @@ task('lameco:download', function () {
         $localDir = $dir . '/';
 
         writeln('Downloading directory: ' . $dir . '...');
-        download($remoteDir, $localDir);
+        download($remoteDir, $localDir, [
+            'options' => ['--copy-links'],
+        ]);
     }
 });
 
