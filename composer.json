@@ -12,5 +12,9 @@
     "require": {
         "php": "^8.4",
         "deployer/deployer": "^7.0"
+    },
+    "require-dev": {
+        "rector/rector": "^2.2",
+        "symplify/easy-coding-standard": "^13.0"
     }
 }
