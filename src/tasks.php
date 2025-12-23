@@ -231,31 +231,42 @@ task('lameco:build_assets', function () {
     }
 
     $nodeVersion = trim(file_get_contents('.nvmrc'));
+    if ($nodeVersion === '') {
+        throw new \RuntimeException('.nvmrc file is empty.');
+    }
 
     writeln('Using Node.js version: ' . $nodeVersion);
 
+    $nodeVersionArg = escapeshellarg($nodeVersion);
+    $nvmInit = 'export NVM_DIR="${NVM_DIR:-$HOME/.nvm}" && [ -s "$NVM_DIR/nvm.sh" ] && . "$NVM_DIR/nvm.sh"';
+    $runWithNvm = function (string $command) use ($nvmInit, $nodeVersionArg): string {
+        $fullCommand = $nvmInit . ' && nvm use ' . $nodeVersionArg . ' >/dev/null && ' . $command;
+        return 'bash -lc ' . escapeshellarg($fullCommand);
+    };
+
     writeln('Checking if Node.js version is already installed...');
 
-    $nodeIsInstalled = testLocally('source $HOME/.nvm/nvm.sh && nvm ls ' . $nodeVersion . ' | grep -q ' . $nodeVersion);
+    $nodeIsInstalled = testLocally('bash -lc ' . escapeshellarg(
+        $nvmInit . ' && [ "$(nvm version ' . $nodeVersionArg . ')" != "N/A" ]'
+    ));
 
     if ($nodeIsInstalled) {
-        writeln('Node.js version is already installed. Using it...');
-        runLocally('source $HOME/.nvm/nvm.sh && nvm use ' . $nodeVersion);
+        writeln('Node.js version is already installed.');
     } else {
         writeln('Node.js version is not installed. Installing...');
-        runLocally('source $HOME/.nvm/nvm.sh && nvm install ' . $nodeVersion);
+        runLocally('bash -lc ' . escapeshellarg($nvmInit . ' && nvm install ' . $nodeVersionArg));
     }
 
     if (nodeSupportsCorepack($nodeVersion)) {
         writeln('Enabling Corepack...');
-        runLocally('source $HOME/.nvm/nvm.sh && corepack enable');
+        runLocally($runWithNvm('corepack enable'));
     }
 
     writeln('Installing dependencies...');
-    runLocally('source $HOME/.nvm/nvm.sh && yarn install');
+    runLocally($runWithNvm('yarn install'));
 
     writeln('Building assets...');
-    runLocally('source $HOME/.nvm/nvm.sh && yarn build ' . get('lameco_assets_build_flags'));
+    runLocally($runWithNvm('yarn build ' . get('lameco_assets_build_flags')));
 });
 
 // Upload built assets to remote.

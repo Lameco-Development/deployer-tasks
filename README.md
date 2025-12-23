@@ -91,6 +91,7 @@ Builds local assets.
 
 - Loads Node.js version from `.nvmrc`.
 - Installs the correct Node.js version using nvm if not already installed.
+- Loads nvm in a non-interactive bash shell and runs each command with `nvm use`, so manual `nvm use` is not required.
 - Enables Corepack if supported by Node.js version (Node 14.19+, 16.9+, or >16).
 - Installs dependencies with yarn.
 - Builds assets with yarn.
@@ -192,6 +193,7 @@ set('lameco_php_config', 'php-fpm-customuser.service');
 - Project type detection is automatic and supports Symfony, Kunstmaan, Craft CMS, and Laravel.
 - Database credential extraction supports `.env` formats for Symfony (`DATABASE_URL`), Craft CMS (`CRAFT_DB_*`), and Laravel (`DB_*`).
 - Asset build and upload tasks expect a working Node.js/yarn setup and `.nvmrc` file.
+- `lameco:build_assets` expects nvm in `$NVM_DIR` (or `~/.nvm`) and uses `bash -lc` to load it.
 - Supervisor and PHP-FPM restarts are configurable and can be disabled per project.
 - For staging hosts, configure a deployment branch (or pass `--branch`) if `release/*` branches exist to avoid ambiguous deployments.
 
