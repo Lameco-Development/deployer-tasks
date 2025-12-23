@@ -187,14 +187,14 @@ task('lameco:build_assets', function () {
 
     if (nodeSupportsCorepack($nodeVersion)) {
         writeln('Enabling Corepack...');
-        runLocally('source $HOME/.nvm/nvm.sh && corepack enable');
+        runLocally('source $HOME/.nvm/nvm.sh && nvm use ' . $nodeVersion . ' && corepack enable');
     }
 
     writeln('Installing dependencies...');
-    runLocally('source $HOME/.nvm/nvm.sh && yarn install');
+    runLocally('source $HOME/.nvm/nvm.sh && nvm use ' . $nodeVersion . ' && yarn install');
 
     writeln('Building assets...');
-    runLocally('source $HOME/.nvm/nvm.sh && yarn build ' . get('lameco_assets_build_flags'));
+    runLocally('source $HOME/.nvm/nvm.sh && nvm use ' . $nodeVersion . ' && yarn build ' . get('lameco_assets_build_flags'));
 });
 
 // Upload built assets to remote.
