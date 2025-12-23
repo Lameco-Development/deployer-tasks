@@ -170,31 +170,32 @@ task('lameco:build_assets', function () {
     }
 
     $nodeVersion = trim(file_get_contents('.nvmrc'));
+    $escapedNodeVersion = escapeshellarg($nodeVersion);
 
     writeln('Using Node.js version: ' . $nodeVersion);
 
     writeln('Checking if Node.js version is already installed...');
 
-    $nodeIsInstalled = testLocally('source $HOME/.nvm/nvm.sh && nvm ls ' . $nodeVersion . ' | grep -q ' . $nodeVersion);
+    $nodeIsInstalled = testLocally('source $HOME/.nvm/nvm.sh && nvm ls ' . $escapedNodeVersion . ' | grep -q ' . $escapedNodeVersion);
 
     if ($nodeIsInstalled) {
         writeln('Node.js version is already installed. Using it...');
-        runLocally('source $HOME/.nvm/nvm.sh && nvm use ' . $nodeVersion);
+        runLocally('source $HOME/.nvm/nvm.sh && nvm use ' . $escapedNodeVersion);
     } else {
         writeln('Node.js version is not installed. Installing...');
-        runLocally('source $HOME/.nvm/nvm.sh && nvm install ' . $nodeVersion);
+        runLocally('source $HOME/.nvm/nvm.sh && nvm install ' . $escapedNodeVersion);
     }
 
     if (nodeSupportsCorepack($nodeVersion)) {
         writeln('Enabling Corepack...');
-        runLocally('source $HOME/.nvm/nvm.sh && nvm use ' . $nodeVersion . ' && corepack enable');
+        runLocally('source $HOME/.nvm/nvm.sh && nvm use ' . $escapedNodeVersion . ' && corepack enable');
     }
 
     writeln('Installing dependencies...');
-    runLocally('source $HOME/.nvm/nvm.sh && nvm use ' . $nodeVersion . ' && yarn install');
+    runLocally('source $HOME/.nvm/nvm.sh && nvm use ' . $escapedNodeVersion . ' && yarn install');
 
     writeln('Building assets...');
-    runLocally('source $HOME/.nvm/nvm.sh && nvm use ' . $nodeVersion . ' && yarn build ' . get('lameco_assets_build_flags'));
+    runLocally('source $HOME/.nvm/nvm.sh && nvm use ' . $escapedNodeVersion . ' && yarn build ' . get('lameco_assets_build_flags'));
 });
 
 // Upload built assets to remote.
