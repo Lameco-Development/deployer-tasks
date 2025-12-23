@@ -11,14 +11,48 @@ namespace Deployer;
 function fetchEnv(string $envContent): array
 {
     $env = [];
-    foreach (explode("\n", $envContent) as $line) {
+    foreach (preg_split('/\r?\n/', $envContent) as $line) {
         $line = trim($line);
-        if ($line === '' || str_starts_with($line, '#')) {
+        if ($line === '' || str_starts_with($line, '#') || str_starts_with($line, ';')) {
             continue;
         }
-        if (preg_match('/^([^=]+)=(?:[\'"]?)(.+?)(?:[\'"]?)$/', $line, $kv)) {
-            $env[$kv[1]] = $kv[2];
+
+        if (str_starts_with($line, 'export ')) {
+            $line = trim(substr($line, strlen('export ')));
         }
+
+        $pos = strpos($line, '=');
+        if ($pos === false) {
+            continue;
+        }
+
+        $key = trim(substr($line, 0, $pos));
+        if ($key === '') {
+            continue;
+        }
+
+        $value = trim(substr($line, $pos + 1));
+        if ($value === '') {
+            $env[$key] = '';
+            continue;
+        }
+
+        $quote = $value[0];
+        if (($quote === '"' || $quote === "'") && str_ends_with($value, $quote)) {
+            $value = substr($value, 1, -1);
+            if ($quote === '"') {
+                $value = str_replace(
+                    ['\\n', '\\r', '\\t', '\\\\', '\\"', '\\$'],
+                    ["\n", "\r", "\t", "\\", '"', '$'],
+                    $value
+                );
+            }
+        } else {
+            $value = preg_replace('/\s[;#].*$/', '', $value);
+            $value = trim((string) $value);
+        }
+
+        $env[$key] = $value;
     }
     return $env;
 }
@@ -33,8 +67,22 @@ function fetchEnv(string $envContent): array
 function extractDbCredentials(array $env): array
 {
     if (! empty($env['DATABASE_URL'])) {
-        if (preg_match('|mysql://([^:]+):([^@]+)@[^/]+/([^?]+)|', (string) $env['DATABASE_URL'], $dbMatch)) {
-            return [$dbMatch[1], $dbMatch[2], $dbMatch[3]];
+        $url = (string) $env['DATABASE_URL'];
+        $parts = parse_url($url);
+        if (is_array($parts) && (! isset($parts['scheme']) || in_array($parts['scheme'], ['mysql', 'mariadb'], true))) {
+            $user = isset($parts['user']) ? rawurldecode($parts['user']) : null;
+            $pass = isset($parts['pass']) ? rawurldecode($parts['pass']) : null;
+            $name = isset($parts['path']) ? ltrim($parts['path'], '/') : null;
+            if ($name !== null && $name !== '') {
+                $query = [];
+                if (isset($parts['query'])) {
+                    parse_str($parts['query'], $query);
+                }
+                if (isset($query['dbname']) && $query['dbname'] !== '') {
+                    $name = $query['dbname'];
+                }
+                return [$user, $pass, $name];
+            }
         }
     } elseif (! empty($env['CRAFT_DB_DATABASE'])) {
         return [
