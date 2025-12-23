@@ -32,21 +32,21 @@ function fetchEnv(string $envContent): array
  */
 function extractDbCredentials(array $env): array
 {
-    if (!empty($env['DATABASE_URL'])) {
-        if (preg_match('|mysql://([^:]+):([^@]+)@[^/]+/([^?]+)|', $env['DATABASE_URL'], $dbMatch)) {
+    if (! empty($env['DATABASE_URL'])) {
+        if (preg_match('|mysql://([^:]+):([^@]+)@[^/]+/([^?]+)|', (string) $env['DATABASE_URL'], $dbMatch)) {
             return [$dbMatch[1], $dbMatch[2], $dbMatch[3]];
         }
-    } elseif (!empty($env['CRAFT_DB_DATABASE'])) {
+    } elseif (! empty($env['CRAFT_DB_DATABASE'])) {
         return [
             $env['CRAFT_DB_USER'] ?? null,
             $env['CRAFT_DB_PASSWORD'] ?? null,
-            $env['CRAFT_DB_DATABASE']
+            $env['CRAFT_DB_DATABASE'],
         ];
-    } elseif (!empty($env['DB_DATABASE'])) { // Fallback for Laravel style
+    } elseif (! empty($env['DB_DATABASE'])) { // Fallback for Laravel style
         return [
             $env['DB_USER'] ?? ($env['DB_USERNAME'] ?? null),
             $env['DB_PASSWORD'] ?? null,
-            $env['DB_DATABASE']
+            $env['DB_DATABASE'],
         ];
     }
     return [null, null, null];
@@ -61,11 +61,10 @@ function extractDbCredentials(array $env): array
 function nodeSupportsCorepack(string $versionString): bool
 {
     if (preg_match('/v(\d+)\.(\d+)\.(\d+)/', $versionString, $m)) {
-        $major = (int)$m[1];
-        $minor = (int)$m[2];
+        $major = (int) $m[1];
+        $minor = (int) $m[2];
         // Corepack from 14.19+, 16.9+, or >16
-        return
-            ($major === 14 && $minor >= 19) ||
+        return ($major === 14 && $minor >= 19) ||
             ($major === 16 && $minor >= 9) ||
             ($major > 16);
     }
@@ -81,7 +80,7 @@ function nodeSupportsCorepack(string $versionString): bool
 function composerHasPackage(string $package): bool
 {
     $composerJsonPath = 'composer.json';
-    if (!file_exists($composerJsonPath)) {
+    if (! file_exists($composerJsonPath)) {
         return false;
     }
     $composer = json_decode(file_get_contents($composerJsonPath), true, 512, JSON_THROW_ON_ERROR);

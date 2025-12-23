@@ -11,14 +11,14 @@ require 'contrib/crontab.php';
 
 // Prompt to deploy all hosts with the same stage if applicable
 desc('Prompt to deploy all hosts with the same stage if applicable');
-task('lameco:stage_prompt', function () {
+task('lameco:stage_prompt', function (): void {
     $selectedHost = currentHost();
-    if (!$selectedHost) {
+    if (! $selectedHost) {
         return;
     }
 
     $stage = $selectedHost->getLabels()['stage'] ?? null;
-    if (!$stage) {
+    if (! $stage) {
         return;
     }
 
@@ -37,7 +37,7 @@ task('lameco:stage_prompt', function () {
         $confirmation = askConfirmation('Do you want to deploy to all hosts with stage ' . $stage . '?', false);
         if ($confirmation) {
             info('Deploying to all hosts with stage ' . $stage);
-            passthru('dep deploy -n stage=' . $stage);
+            passthru('dep deploy -n stage=' . escapeshellarg((string) $stage));
             throw new GracefulShutdownException('Done deploying to all hosts');
         }
     }
@@ -45,9 +45,9 @@ task('lameco:stage_prompt', function () {
 
 // Verify local branch matches deployment branch.
 desc('Verify local branch matches deployment branch');
-task('lameco:verify_deploy_branch', function () {
+task('lameco:verify_deploy_branch', function (): void {
     $selectedHost = currentHost();
-    if (!$selectedHost) {
+    if (! $selectedHost) {
         return;
     }
 
@@ -56,7 +56,7 @@ task('lameco:verify_deploy_branch', function () {
     $hostLabel = $hostAlias ?? $hostName ?? 'current host';
     $hostBranch = $selectedHost->get('branch');
     $stagingMatch = ($hostAlias !== null && stripos($hostAlias, 'staging') !== false)
-        || ($hostName !== null && stripos($hostName, 'staging') !== false);
+        || ($hostName !== null && stripos((string) $hostName, 'staging') !== false);
     if (empty($hostBranch)) {
         return;
     }
@@ -66,7 +66,7 @@ task('lameco:verify_deploy_branch', function () {
     $releaseBranches = [];
     foreach (preg_split('/\r?\n/', $remoteRefs) as $line) {
         $parts = preg_split('/\s+/', trim($line));
-        if (!isset($parts[1]) || !str_starts_with($parts[1], 'refs/heads/')) {
+        if (! isset($parts[1]) || ! str_starts_with($parts[1], 'refs/heads/')) {
             continue;
         }
         $branch = substr($parts[1], strlen('refs/heads/'));
@@ -76,13 +76,13 @@ task('lameco:verify_deploy_branch', function () {
         }
     }
 
-    if (!empty($remoteBranches) && !in_array($hostBranch, $remoteBranches, true)) {
+    if (! empty($remoteBranches) && ! in_array($hostBranch, $remoteBranches, true)) {
         $message = 'Configured branch "' . $hostBranch . '" for ' . $hostLabel . ' does not exist on origin.';
         error($message);
         throw new GracefulShutdownException($message);
     }
 
-    if ($stagingMatch && !empty($releaseBranches) && !in_array($hostBranch, $releaseBranches, true)) {
+    if ($stagingMatch && ! empty($releaseBranches) && ! in_array($hostBranch, $releaseBranches, true)) {
         $message = 'Release branches exist on origin, but ' . $hostLabel .
             ' is not configured to deploy a release/* branch. Set the host branch to a release/* value.';
         error($message);
@@ -106,15 +106,15 @@ task('lameco:verify_deploy_branch', function () {
 
 // Download remote database and import locally.
 desc('Download remote database and import locally');
-task('lameco:db_download', function () {
-    within('{{deploy_path}}/shared', function () {
+task('lameco:db_download', function (): void {
+    within('{{deploy_path}}/shared', function (): void {
         writeln('Reading remote .env file...');
         $remoteEnvContent = run('cat .env');
         $remoteEnv = fetchEnv($remoteEnvContent);
 
         [$remoteDatabaseUser, $remoteDatabasePassword, $remoteDatabaseName] = extractDbCredentials($remoteEnv);
 
-        if (!isset($remoteDatabaseUser, $remoteDatabasePassword, $remoteDatabaseName)) {
+        if (! isset($remoteDatabaseUser, $remoteDatabasePassword, $remoteDatabaseName)) {
             error('Could not extract remote database credentials.');
             return;
         }
@@ -124,18 +124,23 @@ task('lameco:db_download', function () {
 
         $remotePath = '~/{{dump_file}}';
         $localPath = '{{lameco_dump_dir}}/{{dump_file}}';
+        $remotePathArg = escapeshellarg($remotePath);
 
         writeln('Creating remote database dump...');
-        run('mysqldump --quick --single-transaction -u ' . $remoteDatabaseUser . ' -p' . $remoteDatabasePassword . ' ' . $remoteDatabaseName . ' | gzip > ' . $remotePath);
+        $remoteUserArg = escapeshellarg($remoteDatabaseUser);
+        $remotePassEnv = escapeshellarg($remoteDatabasePassword);
+        $remoteDbArg = escapeshellarg($remoteDatabaseName);
+        run('MYSQL_PWD=' . $remotePassEnv . ' mysqldump --quick --single-transaction -u ' . $remoteUserArg . ' ' . $remoteDbArg . ' | gzip > ' . $remotePathArg);
 
         writeln('Downloading database dump to local path: ' . $localPath . '...');
         download($remotePath, $localPath);
 
         writeln('Removing remote database dump...');
-        run('rm ' . $remotePath);
+        run('rm ' . $remotePathArg);
     });
 
     $localPath = '{{lameco_dump_dir}}/{{dump_file}}';
+    $localPathArg = escapeshellarg($localPath);
 
     writeln('Importing database from local dump: ' . $localPath . '...');
 
@@ -145,31 +150,35 @@ task('lameco:db_download', function () {
 
     [$localDatabaseUser, $localDatabasePassword, $localDatabaseName] = extractDbCredentials($localEnv);
 
-    if (!isset($localDatabaseUser, $localDatabasePassword, $localDatabaseName)) {
+    if (! isset($localDatabaseUser, $localDatabasePassword, $localDatabaseName)) {
         error('Could not extract local database credentials.');
         return;
     }
 
     writeln('Creating local database if it does not exist...');
-    runLocally('mysql -u ' . $localDatabaseUser . ' -p' . $localDatabasePassword . ' -e \'DROP DATABASE IF EXISTS ' . $localDatabaseName . '; CREATE DATABASE ' . $localDatabaseName . ';\'');
+    $localUserArg = escapeshellarg((string) $localDatabaseUser);
+    $localPassEnv = escapeshellarg((string) $localDatabasePassword);
+    $localDbName = str_replace('`', '``', $localDatabaseName);
+    $createSql = 'DROP DATABASE IF EXISTS `' . $localDbName . '`; CREATE DATABASE `' . $localDbName . '`;';
+    runLocally('MYSQL_PWD=' . $localPassEnv . ' mysql -u ' . $localUserArg . ' -e ' . escapeshellarg($createSql));
 
     writeln('Importing database dump into local database...');
-    runLocally('gunzip -c ' . $localPath . ' | mysql -u ' . $localDatabaseUser . ' -p' . $localDatabasePassword . ' ' . $localDatabaseName);
+    runLocally('gunzip -c ' . $localPathArg . ' | MYSQL_PWD=' . $localPassEnv . ' mysql -u ' . $localUserArg . ' ' . escapeshellarg((string) $localDatabaseName));
 
     writeln('Removing local dump file...');
-    runLocally('rm ' . $localPath);
+    runLocally('rm ' . $localPathArg);
 });
 
 // Download remote database credentials.
 desc('Download remote database credentials');
-task('lameco:db_credentials', function () {
-    within('{{deploy_path}}/shared', function () {
+task('lameco:db_credentials', function (): void {
+    within('{{deploy_path}}/shared', function (): void {
         $envContent = run('cat .env');
         $env = fetchEnv($envContent);
 
         [$remoteDatabaseUser, $remoteDatabasePassword] = extractDbCredentials($env);
 
-        if (!isset($remoteDatabaseUser, $remoteDatabasePassword)) {
+        if (! isset($remoteDatabaseUser, $remoteDatabasePassword)) {
             writeln('Could not extract remote database credentials.');
             return;
         }
@@ -181,7 +190,7 @@ task('lameco:db_credentials', function () {
 
 // Download directories from remote to local.
 desc('Download directories from remote to local');
-task('lameco:download', function () {
+task('lameco:download', function (): void {
     $downloadDirs = get('lameco_download_dirs');
 
     if (empty($downloadDirs)) {
@@ -204,7 +213,7 @@ task('lameco:download', function () {
 
 // Upload directories from local to remote.
 desc('Upload directories from local to remote');
-task('lameco:upload', function () {
+task('lameco:upload', function (): void {
     $uploadDirs = get('lameco_upload_dirs');
 
     if (empty($uploadDirs)) {
@@ -225,10 +234,10 @@ task('lameco:upload', function () {
 
 // Build local assets.
 desc('Build local assets');
-task('lameco:build_assets', function () {
+task('lameco:build_assets', function (): void {
     writeln('Loading Node.js version from .nvmrc...');
 
-    if (!file_exists('.nvmrc')) {
+    if (! file_exists('.nvmrc')) {
         throw new \RuntimeException('.nvmrc file not found.');
     }
 
@@ -273,7 +282,7 @@ task('lameco:build_assets', function () {
 
 // Upload built assets to remote.
 desc('Upload built assets to remote');
-task('lameco:upload_assets', function () {
+task('lameco:upload_assets', function (): void {
     $assetsDirs = get('lameco_assets_dirs');
     $assetsFiles = get('lameco_assets_files');
 
@@ -285,7 +294,7 @@ task('lameco:upload_assets', function () {
     writeln('Uploading built assets from local to remote...');
 
     // Upload directories
-    if (!empty($assetsDirs)) {
+    if (! empty($assetsDirs)) {
         foreach ($assetsDirs as $dir) {
             $localDir = $dir . '/';
             $remoteDir = '{{release_path}}/' . $dir;
@@ -296,7 +305,7 @@ task('lameco:upload_assets', function () {
     }
 
     // Upload individual files
-    if (!empty($assetsFiles)) {
+    if (! empty($assetsFiles)) {
         foreach ($assetsFiles as $file) {
             $localFile = $file;
             $remoteFile = '{{release_path}}/' . $file;
@@ -309,15 +318,15 @@ task('lameco:upload_assets', function () {
 
 // Restart php-fpm service.
 desc('Restart php-fpm service');
-task('lameco:restart_php', function () {
-    if (!get('lameco_restart_php')) {
+task('lameco:restart_php', function (): void {
+    if (! get('lameco_restart_php')) {
         writeln('php-fpm is not enabled for this project.');
         return;
     }
 
     $config = get('lameco_php_config');
 
-    if (!$config) {
+    if (! $config) {
         writeln('No php-fpm config configured.');
         return;
     }
@@ -325,13 +334,13 @@ task('lameco:restart_php', function () {
     writeln('Restarting php-fpm service...');
 
     writeln('Restarting php-fpm config: ' . $config . '...');
-    run('sudo systemctl restart ' . $config);
+    run('sudo systemctl restart ' . escapeshellarg($config));
 });
 
 // Restart supervisor.
 desc('Restart supervisor');
-task('lameco:restart_supervisor', function () {
-    if (!get('lameco_restart_supervisor')) {
+task('lameco:restart_supervisor', function (): void {
+    if (! get('lameco_restart_supervisor')) {
         writeln('Supervisor is not enabled for this project.');
         return;
     }
@@ -347,51 +356,55 @@ task('lameco:restart_supervisor', function () {
 
     foreach ($supervisorConfigs as $config) {
         writeln('Restarting supervisor config: ' . $config . '...');
-        run('supervisorctl -c /etc/projects/supervisor/' . $config . ' restart all');
+        $configPath = '/etc/projects/supervisor/' . $config;
+        run('supervisorctl -c ' . escapeshellarg($configPath) . ' restart all');
     }
 });
 
 // Update .htpasswd for staging environments.
 desc('Update .htpasswd for staging environments');
-task('lameco:update_htpasswd', function () {
+task('lameco:update_htpasswd', function (): void {
     $selectedHost = currentHost();
-    if (!$selectedHost) {
+    if (! $selectedHost) {
         return;
     }
 
     // Check if this is a staging environment
-    if (strpos($selectedHost, 'staging') === false) {
+    $hostAlias = (string) ($selectedHost->getAlias() ?? '');
+    $hostName = (string) ($selectedHost->getHostname() ?? '');
+    $stage = (string) ($selectedHost->getLabels()['stage'] ?? '');
+    if ($stage !== 'staging' && ! str_contains($hostAlias, 'staging') && ! str_contains($hostName, 'staging')) {
         writeln('Skipping .htpasswd update - not a staging environment.');
         return;
     }
 
     $httpUser = get('http_user');
 
-    if (!$httpUser) {
+    if (! $httpUser) {
         error('http_user variable is not set.');
         return;
     }
 
     writeln('Updating .htpasswd for staging environment...');
-    
+
     $htpasswdPath = '/projects/' . $httpUser . '/.local/nginx/.htpasswd';
     $username = 'lameco';
-    
+
     // Generate bcrypt hash of the http_user (password)
     writeln('Generating bcrypt hash for password...');
-    $hashedPassword = run('mkpasswd -m bcrypt "' . $httpUser . '"');
-    
+    $hashedPassword = run('mkpasswd -m bcrypt ' . escapeshellarg($httpUser));
+
     // Ensure the directory exists
-    run('mkdir -p /projects/' . $httpUser . '/.local/nginx');
-    
+    run('mkdir -p ' . escapeshellarg('/projects/' . $httpUser . '/.local/nginx'));
+
     // Create or update the .htpasswd file
     $htpasswdEntry = $username . ':' . trim($hashedPassword);
-    
+
     // Check if the file exists and if the entry is already correct
     $fileExists = test('[ -f "' . $htpasswdPath . '" ]');
-    
+
     // Write the .htpasswd entry
-    run('echo \'' . $htpasswdEntry . '\' > ' . $htpasswdPath);
+    run('echo ' . escapeshellarg($htpasswdEntry) . ' > ' . escapeshellarg($htpasswdPath));
     writeln('.htpasswd updated successfully at: ' . $htpasswdPath);
 });
 
