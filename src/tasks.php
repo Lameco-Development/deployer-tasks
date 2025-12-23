@@ -43,6 +43,67 @@ task('lameco:stage_prompt', function () {
     }
 });
 
+// Verify local branch matches deployment branch.
+desc('Verify local branch matches deployment branch');
+task('lameco:verify_deploy_branch', function () {
+    $selectedHost = currentHost();
+    if (!$selectedHost) {
+        return;
+    }
+
+    $hostAlias = $selectedHost->getAlias();
+    $hostName = $selectedHost->getHostname();
+    $hostLabel = $hostAlias ?? $hostName ?? 'current host';
+    $hostBranch = $selectedHost->get('branch');
+    $stagingMatch = ($hostAlias !== null && stripos($hostAlias, 'staging') !== false)
+        || ($hostName !== null && stripos($hostName, 'staging') !== false);
+    if (empty($hostBranch)) {
+        return;
+    }
+
+    $remoteRefs = trim(runLocally('git ls-remote --heads origin || true'));
+    $remoteBranches = [];
+    $releaseBranches = [];
+    foreach (preg_split('/\r?\n/', $remoteRefs) as $line) {
+        $parts = preg_split('/\s+/', trim($line));
+        if (!isset($parts[1]) || !str_starts_with($parts[1], 'refs/heads/')) {
+            continue;
+        }
+        $branch = substr($parts[1], strlen('refs/heads/'));
+        $remoteBranches[] = $branch;
+        if (str_starts_with($branch, 'release/')) {
+            $releaseBranches[] = $branch;
+        }
+    }
+
+    if (!empty($remoteBranches) && !in_array($hostBranch, $remoteBranches, true)) {
+        $message = 'Configured branch "' . $hostBranch . '" for ' . $hostLabel . ' does not exist on origin.';
+        error($message);
+        throw new GracefulShutdownException($message);
+    }
+
+    if ($stagingMatch && !empty($releaseBranches) && !in_array($hostBranch, $releaseBranches, true)) {
+        $message = 'Release branches exist on origin, but ' . $hostLabel .
+            ' is not configured to deploy a release/* branch. Set the host branch to a release/* value.';
+        error($message);
+        throw new GracefulShutdownException($message);
+    }
+
+    $localBranch = trim(runLocally('git rev-parse --abbrev-ref HEAD'));
+    if ($localBranch === 'HEAD') {
+        $message = 'Local checkout is detached. Switch to a branch before deploying.';
+        error($message);
+        throw new GracefulShutdownException($message);
+    }
+
+    if ($localBranch !== $hostBranch) {
+        $message = 'Local branch "' . $localBranch . '" does not match deployment branch "' . $hostBranch .
+            '" for ' . $hostLabel . '.';
+        error($message);
+        throw new GracefulShutdownException($message);
+    }
+});
+
 // Download remote database and import locally.
 desc('Download remote database and import locally');
 task('lameco:db_download', function () {
@@ -135,7 +196,9 @@ task('lameco:download', function () {
         $localDir = $dir . '/';
 
         writeln('Downloading directory: ' . $dir . '...');
-        download($remoteDir, $localDir);
+        download($remoteDir, $localDir, [
+            'options' => ['--copy-links'],
+        ]);
     }
 });
 
@@ -170,31 +233,42 @@ task('lameco:build_assets', function () {
     }
 
     $nodeVersion = trim(file_get_contents('.nvmrc'));
+    if ($nodeVersion === '') {
+        throw new \RuntimeException('.nvmrc file is empty.');
+    }
 
     writeln('Using Node.js version: ' . $nodeVersion);
 
+    $nodeVersionArg = escapeshellarg($nodeVersion);
+    $nvmInit = 'export NVM_DIR="${NVM_DIR:-$HOME/.nvm}" && [ -s "$NVM_DIR/nvm.sh" ] && . "$NVM_DIR/nvm.sh"';
+    $runWithNvm = function (string $command) use ($nvmInit, $nodeVersionArg): string {
+        $fullCommand = $nvmInit . ' && nvm use ' . $nodeVersionArg . ' >/dev/null && ' . $command;
+        return 'bash -lc ' . escapeshellarg($fullCommand);
+    };
+
     writeln('Checking if Node.js version is already installed...');
 
-    $nodeIsInstalled = testLocally('source $HOME/.nvm/nvm.sh && nvm ls ' . $nodeVersion . ' | grep -q ' . $nodeVersion);
+    $nodeIsInstalled = testLocally('bash -lc ' . escapeshellarg(
+        $nvmInit . ' && [ "$(nvm version ' . $nodeVersionArg . ')" != "N/A" ]'
+    ));
 
     if ($nodeIsInstalled) {
-        writeln('Node.js version is already installed. Using it...');
-        runLocally('source $HOME/.nvm/nvm.sh && nvm use ' . $nodeVersion);
+        writeln('Node.js version is already installed.');
     } else {
         writeln('Node.js version is not installed. Installing...');
-        runLocally('source $HOME/.nvm/nvm.sh && nvm install ' . $nodeVersion);
+        runLocally('bash -lc ' . escapeshellarg($nvmInit . ' && nvm install ' . $nodeVersionArg));
     }
 
     if (nodeSupportsCorepack($nodeVersion)) {
         writeln('Enabling Corepack...');
-        runLocally('source $HOME/.nvm/nvm.sh && corepack enable');
+        runLocally($runWithNvm('corepack enable'));
     }
 
     writeln('Installing dependencies...');
-    runLocally('source $HOME/.nvm/nvm.sh && yarn install');
+    runLocally($runWithNvm('yarn install'));
 
     writeln('Building assets...');
-    runLocally('source $HOME/.nvm/nvm.sh && yarn build ' . get('lameco_assets_build_flags'));
+    runLocally($runWithNvm('yarn build ' . get('lameco_assets_build_flags')));
 });
 
 // Upload built assets to remote.
@@ -322,6 +396,7 @@ task('lameco:update_htpasswd', function () {
 });
 
 before('deploy', 'lameco:stage_prompt');
+before('deploy', 'lameco:verify_deploy_branch');
 
 before('deploy:symlink', 'lameco:build_assets');
 after('lameco:build_assets', 'lameco:upload_assets');

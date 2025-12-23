@@ -33,6 +33,16 @@ Prompts to deploy all hosts with the same stage if applicable.
 
 ---
 
+### lameco:verify_deploy_branch
+
+Ensures the local branch matches the deployment branch.
+
+- Compares the current local git branch with the branch configured on the host (or `--branch` when provided).
+- Stops the deployment if the branches do not match, preventing asset builds from mismatching the deployed code.
+- If deploying to a `staging*` host without a branch configured, and `origin` has `release/*` branches, deployment is halted until a release branch is selected.
+
+---
+
 ### lameco:db_download
 
 Downloads the remote database and imports it locally.
@@ -81,6 +91,7 @@ Builds local assets.
 
 - Loads Node.js version from `.nvmrc`.
 - Installs the correct Node.js version using nvm if not already installed.
+- Loads nvm in a non-interactive bash shell and runs each command with `nvm use`, so manual `nvm use` is not required.
 - Enables Corepack if supported by Node.js version (Node 14.19+, 16.9+, or >16).
 - Installs dependencies with yarn.
 - Builds assets with yarn.
@@ -157,6 +168,7 @@ Updates .htpasswd file for staging environments.
 
 - `lameco:load` runs before `deploy`
 - `lameco:stage_prompt` runs before `deploy`
+- `lameco:verify_deploy_branch` runs before `deploy`
 - `lameco:db_download`, `lameco:db_credentials`, `lameco:download`, and `lameco:upload` depend on `lameco:load`
 - `lameco:build_assets` runs before `deploy:symlink`
 - `lameco:upload_assets` runs after `lameco:build_assets`
@@ -181,7 +193,9 @@ set('lameco_php_config', 'php-fpm-customuser.service');
 - Project type detection is automatic and supports Symfony, Kunstmaan, Craft CMS, and Laravel.
 - Database credential extraction supports `.env` formats for Symfony (`DATABASE_URL`), Craft CMS (`CRAFT_DB_*`), and Laravel (`DB_*`).
 - Asset build and upload tasks expect a working Node.js/yarn setup and `.nvmrc` file.
+- `lameco:build_assets` expects nvm in `$NVM_DIR` (or `~/.nvm`) and uses `bash -lc` to load it.
 - Supervisor and PHP-FPM restarts are configurable and can be disabled per project.
+- For staging hosts, configure a deployment branch (or pass `--branch`) if `release/*` branches exist to avoid ambiguous deployments.
 
 ## License
 
