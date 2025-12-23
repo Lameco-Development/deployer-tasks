@@ -9,40 +9,6 @@ require_once __DIR__ . '/functions.php';
 
 require 'contrib/crontab.php';
 
-// Prompt to deploy all hosts with the same stage if applicable
-desc('Prompt to deploy all hosts with the same stage if applicable');
-task('lameco:stage_prompt', function (): void {
-    $selectedHost = currentHost();
-    if (! $selectedHost) {
-        return;
-    }
-
-    $stage = $selectedHost->getLabels()['stage'] ?? null;
-    if (! $stage) {
-        return;
-    }
-
-    // Get all defined hosts from Deployer config.
-    $allHosts = Deployer::get()->hosts;
-    $hostsWithStage = [];
-    foreach ($allHosts as $host) {
-        if (($host->getLabels()['stage'] ?? null) === $stage) {
-            $hostsWithStage[] = $host->getAlias();
-        }
-    }
-
-    // Only prompt if there are multiple hosts with this stage and not all are already selected.
-    if (count($hostsWithStage) > 1 && count($allHosts) !== count($hostsWithStage)) {
-        info('Host ' . $selectedHost->getAlias() . ' (' . $selectedHost->getHostname() . ') has stage ' . $stage);
-        $confirmation = askConfirmation('Do you want to deploy to all hosts with stage ' . $stage . '?', false);
-        if ($confirmation) {
-            info('Deploying to all hosts with stage ' . $stage);
-            passthru('dep deploy -n stage=' . escapeshellarg((string) $stage));
-            throw new GracefulShutdownException('Done deploying to all hosts');
-        }
-    }
-});
-
 // Verify local branch matches deployment branch.
 desc('Verify local branch matches deployment branch');
 task('lameco:verify_deploy_branch', function (): void {
@@ -278,7 +244,7 @@ task('lameco:build_assets', function (): void {
 
     writeln('Building assets...');
     runLocally($runWithNvm('yarn build ' . get('lameco_assets_build_flags')));
-});
+})->once();
 
 // Upload built assets to remote.
 desc('Upload built assets to remote');
@@ -408,7 +374,6 @@ task('lameco:update_htpasswd', function (): void {
     writeln('.htpasswd updated successfully at: ' . $htpasswdPath);
 });
 
-before('deploy', 'lameco:stage_prompt');
 before('deploy', 'lameco:verify_deploy_branch');
 
 before('deploy:symlink', 'lameco:build_assets');
