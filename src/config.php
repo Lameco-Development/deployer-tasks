@@ -108,6 +108,3 @@ set('lameco_supervisor_configs', ['{{http_user}}.conf']);
 
 set('lameco_restart_php', true);
 set('lameco_php_config', 'php-fpm-{{http_user}}.service');
-
-// Blitz cache cleanup configuration
-set('lameco_cleanup_blitz_cache', true);

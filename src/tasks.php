@@ -285,21 +285,15 @@ task('lameco:cleanup_blitz_cache', function () {
         return;
     }
 
-    // Check if cleanup is enabled (default: true for Craft CMS)
-    if (!get('lameco_cleanup_blitz_cache', true)) {
-        writeln('Blitz cache cleanup is disabled.');
-        return;
-    }
-
     writeln('Cleaning up Blitz cache from old releases...');
 
-    // Get the current release name and all releases
-    $currentRelease = basename(run('readlink {{deploy_path}}/current'));
-    $releases = explode("\n", run('ls -1 {{deploy_path}}/releases'));
+    // Get the current release name and all releases using Deployer's built-in functions
+    $currentRelease = get('release_name');
+    $allReleases = get('releases_list');
     
-    // Filter out empty entries and the current release
-    $oldReleases = array_filter($releases, function($release) use ($currentRelease) {
-        return !empty(trim($release)) && trim($release) !== $currentRelease;
+    // Filter out the current release
+    $oldReleases = array_filter($allReleases, function($release) use ($currentRelease) {
+        return $release !== $currentRelease;
     });
 
     if (empty($oldReleases)) {
@@ -309,7 +303,6 @@ task('lameco:cleanup_blitz_cache', function () {
 
     $cleanedCount = 0;
     foreach ($oldReleases as $release) {
-        $release = trim($release);
         $blitzCachePath = "{{deploy_path}}/releases/{$release}/{{lameco_public_dir}}/cache/blitz";
         
         // Check if the Blitz cache directory exists before attempting to remove it

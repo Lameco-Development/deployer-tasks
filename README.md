@@ -132,7 +132,6 @@ Cleans up Blitz cache from old releases for Craft CMS projects.
 - Removes the `web/cache/blitz` directory from all previous releases except the current active one.
 - Runs after successful deployment to ensure the deployment is complete before cleanup.
 - Helps prevent storage bloat and ensures outdated cache files do not accumulate in old releases.
-- Can be disabled by setting `lameco_cleanup_blitz_cache` to false.
 - **Why this is needed for Craft CMS**: Blitz is a static cache plugin for Craft CMS that stores cached files in `web/cache/blitz`. During deployment, these cache files can accumulate across multiple releases, consuming unnecessary disk space. Since the cache is environment-specific and tied to the current release, old cache files serve no purpose and should be cleaned up to maintain optimal server performance.
 
 ---
@@ -150,7 +149,6 @@ Cleans up Blitz cache from old releases for Craft CMS projects.
 - `lameco_php_config`: PHP-FPM systemd service name (default: `php-fpm-{{http_user}}.service`)
 - `lameco_restart_supervisor`: Enable/disable supervisor restart (default: true)
 - `lameco_supervisor_configs`: Supervisor config files (default: `[get('http_user') . '.conf']`)
-- `lameco_cleanup_blitz_cache`: Enable/disable Blitz cache cleanup from old releases for Craft CMS (default: true)
 - `http_user`: User running PHP-FPM or supervisor
 
 ## Task Dependencies
