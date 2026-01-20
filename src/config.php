@@ -42,11 +42,11 @@ set('crontab:jobs', function () {
     $jobs = [];
 
     if (composerHasPackage('putyourlightson/craft-blitz')) {
-        $jobs[] = '5 * * * * cd {{current_path}} && {{bin/php}} craft blitz/cache/refresh-expired';
+        $jobs[] = getCronMinute() . ' * * * * cd {{current_path}} && {{bin/php}} craft blitz/cache/refresh-expired';
     }
 
     if (composerHasPackage('verbb/formie')) {
-        $jobs[] = '5 * * * * cd {{current_path}} && {{bin/php}} craft formie/gc/prune-data-retention-submissions';
+        $jobs[] = getCronMinute() . ' * * * * cd {{current_path}} && {{bin/php}} craft formie/gc/prune-data-retention-submissions';
     }
 
     return $jobs;
