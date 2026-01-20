@@ -43,7 +43,7 @@ function fetchEnv(string $envContent): array
             if ($quote === '"') {
                 $value = str_replace(
                     ['\\n', '\\r', '\\t', '\\\\', '\\"', '\\$'],
-                    ["\n", "\r", "\t", "\\", '"', '$'],
+                    ["\n", "\r", "\t", '\\', '"', '$'],
                     $value
                 );
             }
@@ -137,4 +137,24 @@ function composerHasPackage(string $package): bool
         $composer['require-dev'] ?? []
     );
     return array_key_exists($package, $require);
+}
+
+/**
+ * Determine if the current host is a staging environment.
+ *
+ * @return bool True if the current host is a staging environment, false otherwise.
+ */
+function isStaging(): bool
+{
+    $selectedHost = currentHost();
+    if (! $selectedHost) {
+        return false;
+    }
+
+    // Check if this is a staging environment
+    $hostAlias = (string) ($selectedHost->getAlias() ?? '');
+    $hostName = (string) ($selectedHost->getHostname() ?? '');
+    $stage = (string) ($selectedHost->getLabels()['stage'] ?? '');
+
+    return $stage === 'staging' || str_contains($hostAlias, 'staging') || str_contains($hostName, 'staging');
 }

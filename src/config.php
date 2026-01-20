@@ -7,7 +7,12 @@ require_once __DIR__ . '/functions.php';
 // Deployer
 
 set('deploy_path', '~');
-set('keep_releases', 3);
+
+set('lameco_keep_releases_staging', 1);
+set('lameco_keep_releases_default', 3);
+set('keep_releases', fn () => isStaging()
+    ? get('lameco_keep_releases_staging')
+    : get('lameco_keep_releases_default'));
 
 $sharedDirs = get('shared_dirs');
 set('shared_dirs', function () use ($sharedDirs) {
