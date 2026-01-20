@@ -21,8 +21,7 @@ task('lameco:verify_deploy_branch', function (): void {
     $hostName = $selectedHost->getHostname();
     $hostLabel = $hostAlias ?? $hostName ?? 'current host';
     $hostBranch = $selectedHost->get('branch');
-    $stagingMatch = ($hostAlias !== null && stripos($hostAlias, 'staging') !== false)
-        || ($hostName !== null && stripos((string) $hostName, 'staging') !== false);
+    $stagingMatch = isStaging();
     if (empty($hostBranch)) {
         return;
     }
@@ -336,10 +335,7 @@ task('lameco:update_htpasswd', function (): void {
     }
 
     // Check if this is a staging environment
-    $hostAlias = (string) ($selectedHost->getAlias() ?? '');
-    $hostName = (string) ($selectedHost->getHostname() ?? '');
-    $stage = (string) ($selectedHost->getLabels()['stage'] ?? '');
-    if ($stage !== 'staging' && ! str_contains($hostAlias, 'staging') && ! str_contains($hostName, 'staging')) {
+    if (! isStaging()) {
         writeln('Skipping .htpasswd update - not a staging environment.');
         return;
     }
