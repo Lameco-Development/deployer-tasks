@@ -88,9 +88,9 @@ task('lameco:db_download', function (): void {
         $dumpFile = 'current_' . $remoteDatabaseName . '.sql.gz';
         set('dump_file', $dumpFile);
 
-        $remotePath = '~/{{dump_file}}';
+        $remotePath = '{{deploy_path}}/shared/{{dump_file}}';
         $localPath = '{{lameco_dump_dir}}/{{dump_file}}';
-        $remotePathArg = escapeshellarg($remotePath);
+        $remotePathArg = escapeshellarg($dumpFile);
 
         writeln('Creating remote database dump...');
         $remoteUserArg = escapeshellarg($remoteDatabaseUser);
