@@ -7,7 +7,12 @@ require_once __DIR__ . '/functions.php';
 // Deployer
 
 set('deploy_path', '~');
-set('keep_releases', 3);
+
+set('lameco_keep_releases_staging', 1);
+set('lameco_keep_releases_default', 3);
+set('keep_releases', fn () => isStaging()
+    ? get('lameco_keep_releases_staging')
+    : get('lameco_keep_releases_default'));
 
 $sharedDirs = get('shared_dirs');
 set('shared_dirs', function () use ($sharedDirs) {
@@ -37,11 +42,11 @@ set('crontab:jobs', function () {
     $jobs = [];
 
     if (composerHasPackage('putyourlightson/craft-blitz')) {
-        $jobs[] = '5 * * * * cd {{current_path}} && {{bin/php}} craft blitz/cache/refresh-expired';
+        $jobs[] = getCronMinute() . ' * * * * cd {{current_path}} && {{bin/php}} craft blitz/cache/refresh-expired';
     }
 
     if (composerHasPackage('verbb/formie')) {
-        $jobs[] = '5 * * * * cd {{current_path}} && {{bin/php}} craft formie/gc/prune-data-retention-submissions';
+        $jobs[] = getCronMinute() . ' * * * * cd {{current_path}} && {{bin/php}} craft formie/gc/prune-data-retention-submissions';
     }
 
     return $jobs;
