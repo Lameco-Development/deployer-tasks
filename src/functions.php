@@ -171,37 +171,37 @@ function getCronMinute(): int
 {
     static $usedSlots = [];
     static $nextSlot = null;
-    
+
     // Initialize on first call
     if ($nextSlot === null) {
         // Use http_user as the seed since it's unique per project
         $seed = get('http_user', false) ?: get('deploy_path');
-        
+
         // Generate a deterministic starting slot for this project
         $nextSlot = abs(crc32((string) $seed)) % 12;
     }
-    
+
     // Find the next available slot
     $slot = $nextSlot;
     $attempts = 0;
-    
+
     // If we've cycled through all 12 slots, reset
     if (count($usedSlots) >= 12) {
         $usedSlots = [];
     }
-    
+
     // Find next unused slot (or wrap around if all used)
     while (in_array($slot, $usedSlots, true) && $attempts < 12) {
         $slot = ($slot + 1) % 12;
         $attempts++;
     }
-    
+
     // Mark this slot as used
     $usedSlots[] = $slot;
-    
+
     // Update next slot for next call
     $nextSlot = ($slot + 1) % 12;
-    
+
     // Convert slot to minute (multiply by 5)
     return $slot * 5;
 }
