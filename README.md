@@ -97,6 +97,7 @@ Uploads built assets to remote.
 
 - Uploads each directory in `lameco_assets_dirs` from local to `{{release_path}}` on the remote.
 - Uploads each file in `lameco_assets_files` from local to `{{release_path}}` on the remote.
+- Sets file permissions to 644 (read/write for owner, read for group and others) for all uploaded assets to prevent permission issues.
 - Default: uploads `['{{lameco_public_dir}}/dist']` for directories, empty array for files.
 
 ---
