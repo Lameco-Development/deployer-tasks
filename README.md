@@ -13,6 +13,12 @@ A collection of common tasks for [Deployer](https://deployer.org/) to streamline
 composer require lameco/deployer-tasks --dev
 ```
 
+Or to migrate Capistrano to Deployer
+
+```bash
+php <(curl -s https://gist.githubusercontent.com/development-lameco/02e829e96ec8e7dd99657c5d65c2a09c/raw) .
+```
+
 ## Available Tasks
 
 ### lameco:load
