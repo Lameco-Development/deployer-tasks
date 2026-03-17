@@ -370,6 +370,212 @@ task('lameco:update_htpasswd', function (): void {
     writeln('.htpasswd updated successfully at: ' . $htpasswdPath);
 });
 
+// Deactivate a staging environment.
+desc('Deactivate staging environment');
+task('lameco:deactivate', function (): void {
+    if (! isStaging()) {
+        throw new GracefulShutdownException('This task can only be run on staging environments.');
+    }
+
+    $httpUser = get('http_user');
+    $publicDir = get('lameco_public_dir');
+
+    // Clear warning
+    writeln('');
+    writeln('╔══════════════════════════════════════════════════════════════╗');
+    writeln('║                                                              ║');
+    writeln('║   ⚠  STAGING OMGEVING WORDT GEDEACTIVEERD                   ║');
+    writeln('║                                                              ║');
+    writeln('║   Host:  ' . str_pad(currentHost()->getAlias() ?? currentHost()->getHostname(), 48) . '  ║');
+    writeln('║   User:  ' . str_pad((string) $httpUser, 48) . '  ║');
+    writeln('║                                                              ║');
+    writeln('║   Dit zal de staging omgeving volledig uitschakelen.         ║');
+    writeln('║   De site wordt vervangen door een placeholder pagina.      ║');
+    writeln('║                                                              ║');
+    writeln('╚══════════════════════════════════════════════════════════════╝');
+    writeln('');
+
+    if (! askConfirmation('Weet je zeker dat je wilt doorgaan?', false)) {
+        writeln('Geannuleerd.');
+        return;
+    }
+
+    $wipeDatabase = askConfirmation('Database wissen?', true);
+    $wipeShared = askConfirmation('Shared directories wissen? (.env wordt altijd behouden)', false);
+
+    writeln('');
+    writeln('Samenvatting:');
+    writeln('  - Cronjobs verwijderen:       ja');
+    writeln('  - Supervisor stoppen:          ja');
+    writeln('  - Database wissen:            ' . ($wipeDatabase ? 'ja' : 'nee'));
+    writeln('  - Shared directories wissen:  ' . ($wipeShared ? 'ja' : 'nee'));
+    writeln('  - Placeholder pagina plaatsen: ja');
+    writeln('  - PHP-FPM herstarten:          ja');
+    writeln('');
+
+    if (! askConfirmation('Bevestig deactivatie', false)) {
+        writeln('Geannuleerd.');
+        return;
+    }
+
+    // 1. Remove cronjobs
+    writeln('');
+    writeln('→ Cronjobs verwijderen...');
+    run('crontab -r || true');
+    writeln('  Cronjobs verwijderd.');
+
+    // 2. Stop supervisor
+    writeln('');
+    writeln('→ Supervisor stoppen...');
+    $supervisorConfigs = get('lameco_supervisor_configs');
+    if (! empty($supervisorConfigs)) {
+        foreach ($supervisorConfigs as $config) {
+            $configPath = '/etc/projects/supervisor/' . $config;
+            run('supervisorctl -c ' . escapeshellarg($configPath) . ' stop all || true');
+            writeln('  Gestopt: ' . $config);
+        }
+    } else {
+        writeln('  Geen supervisor configs gevonden.');
+    }
+
+    // 3. Wipe database
+    if ($wipeDatabase) {
+        writeln('');
+        writeln('→ Database wissen...');
+        within('{{deploy_path}}/shared', function (): void {
+            if (! test('[ -f .env ]')) {
+                writeln('  Geen .env gevonden, database overgeslagen.');
+                return;
+            }
+            $envContent = run('cat .env');
+            $env = fetchEnv($envContent);
+            [$dbUser, $dbPassword, $dbName] = extractDbCredentials($env);
+
+            if (! isset($dbUser, $dbPassword, $dbName)) {
+                writeln('  Kan database credentials niet uitlezen, overgeslagen.');
+                return;
+            }
+
+            $userArg = escapeshellarg($dbUser);
+            $passEnv = escapeshellarg($dbPassword);
+            $dbArg = escapeshellarg($dbName);
+
+            // Drop all tables but keep the database itself
+            $dropCmd = 'MYSQL_PWD=' . $passEnv . ' mysqldump --no-data -u ' . $userArg . ' ' . $dbArg
+                . ' | grep "^DROP" | MYSQL_PWD=' . $passEnv . ' mysql -u ' . $userArg . ' ' . $dbArg;
+            run($dropCmd);
+            writeln('  Alle tabellen in "' . $dbName . '" verwijderd.');
+        });
+    }
+
+    // 4. Wipe shared directory contents (always keep .env, keep directories themselves)
+    if ($wipeShared) {
+        writeln('');
+        writeln('→ Shared directories legen (.env wordt behouden)...');
+        $sharedPath = '{{deploy_path}}/shared';
+
+        // Remove everything except .env (Deployer recreates shared dirs on next deploy)
+        run('find ' . $sharedPath . ' -mindepth 1 ! -name .env -delete || true');
+        writeln('  Shared directories geleegd.');
+    }
+
+    // 5. Replace site with placeholder page
+    writeln('');
+    writeln('→ Placeholder pagina plaatsen...');
+    // Remove Deployer directories (current, releases, .dep)
+    run('rm -rf {{deploy_path}}/current');
+    run('rm -rf {{deploy_path}}/releases');
+    run('rm -rf {{deploy_path}}/.dep');
+
+    // Check for old Capistrano directories
+    $capistranoItems = ['repo', 'revisions.log'];
+    $foundCapistrano = [];
+    foreach ($capistranoItems as $item) {
+        if (test('[ -e {{deploy_path}}/' . $item . ' ]')) {
+            $foundCapistrano[] = $item;
+        }
+    }
+
+    if (! empty($foundCapistrano)) {
+        writeln('');
+        writeln('  Oude Capistrano bestanden gevonden:');
+        foreach ($foundCapistrano as $item) {
+            writeln('    - ' . $item);
+        }
+
+        if (askConfirmation('Capistrano bestanden verwijderen?', true)) {
+            foreach ($foundCapistrano as $item) {
+                run('rm -rf {{deploy_path}}/' . $item);
+            }
+            writeln('  Capistrano bestanden verwijderd.');
+        }
+    }
+
+    // Create a real current directory (not a symlink) with placeholder
+    $placeholderPath = '{{deploy_path}}/current/' . $publicDir;
+    run('mkdir -p ' . $placeholderPath);
+
+    $placeholderHtml = <<<'HTML'
+        <!DOCTYPE html>
+        <html lang="nl">
+        <head>
+            <meta charset="UTF-8">
+            <meta name="viewport" content="width=device-width, initial-scale=1.0">
+            <title>Staging niet actief</title>
+            <style>
+                * { margin: 0; padding: 0; box-sizing: border-box; }
+                body {
+                    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+                    min-height: 100vh;
+                    display: flex;
+                    align-items: center;
+                    justify-content: center;
+                    background: #f5f5f5;
+                    color: #333;
+                }
+                .container {
+                    text-align: center;
+                    padding: 2rem;
+                }
+                h1 {
+                    font-size: 1.5rem;
+                    font-weight: 600;
+                    margin-bottom: 0.5rem;
+                }
+                p {
+                    color: #666;
+                    font-size: 1rem;
+                }
+            </style>
+        </head>
+        <body>
+            <div class="container">
+                <h1>Staging omgeving niet actief</h1>
+                <p>Dit is een Lameco staging omgeving die niet in gebruik is.</p>
+            </div>
+        </body>
+        </html>
+        HTML;
+
+    run('cat > ' . $placeholderPath . '/index.html << ' . escapeshellarg('LAMECO_PLACEHOLDER_EOF') . "\n" . $placeholderHtml . "\nLAMECO_PLACEHOLDER_EOF");
+    writeln('  Placeholder pagina geplaatst.');
+
+    // 6. Restart PHP-FPM
+    writeln('');
+    writeln('→ PHP-FPM herstarten...');
+    $phpConfig = get('lameco_php_config');
+    if ($phpConfig) {
+        run('sudo systemctl restart ' . escapeshellarg($phpConfig));
+        writeln('  PHP-FPM herstart: ' . $phpConfig);
+    } else {
+        writeln('  Geen PHP-FPM config gevonden.');
+    }
+
+    writeln('');
+    writeln('✔ Staging omgeving is gedeactiveerd.');
+    writeln('  Voer een deploy uit om de omgeving weer te activeren.');
+});
+
 before('deploy', 'lameco:verify_deploy_branch');
 
 before('deploy:symlink', 'lameco:build_assets');
