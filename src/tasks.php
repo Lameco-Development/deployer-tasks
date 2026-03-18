@@ -462,7 +462,9 @@ task('lameco:deactivate', function (): void {
 
             // Drop all tables but keep the database itself
             $dropCmd = 'MYSQL_PWD=' . $passEnv . ' mysqldump --no-data -u ' . $userArg . ' ' . $dbArg
-                . ' | grep "^DROP" | MYSQL_PWD=' . $passEnv . ' mysql -u ' . $userArg . ' ' . $dbArg;
+                . ' | grep "^DROP"'
+                . ' | (echo "SET FOREIGN_KEY_CHECKS=0;"; cat; echo "SET FOREIGN_KEY_CHECKS=1;")'
+                . ' | MYSQL_PWD=' . $passEnv . ' mysql -u ' . $userArg . ' ' . $dbArg;
             run($dropCmd);
             writeln('  Alle tabellen in "' . $dbName . '" verwijderd.');
         });
@@ -557,7 +559,8 @@ task('lameco:deactivate', function (): void {
         </html>
         HTML;
 
-    run('cat > ' . $placeholderPath . '/index.html << ' . escapeshellarg('LAMECO_PLACEHOLDER_EOF') . "\n" . $placeholderHtml . "\nLAMECO_PLACEHOLDER_EOF");
+    $encodedHtml = base64_encode($placeholderHtml);
+    run('echo ' . escapeshellarg($encodedHtml) . ' | base64 -d > ' . $placeholderPath . '/index.html');
     writeln('  Placeholder pagina geplaatst.');
 
     // 6. Restart PHP-FPM
