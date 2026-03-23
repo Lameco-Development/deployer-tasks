@@ -153,6 +153,72 @@ task('lameco:db_credentials', function (): void {
     });
 });
 
+// Upload a local database dump to remote and import it.
+desc('Upload local database dump to remote and import it');
+task('lameco:db_upload', function (): void {
+    $dumpDir = get('lameco_dump_dir');
+
+    if (has('dump_file')) {
+        $dumpFile = get('dump_file');
+    } else {
+        $dumpFiles = glob($dumpDir . '/current_*.sql.gz') ?: [];
+
+        if (empty($dumpFiles)) {
+            error('No dump file found in ' . $dumpDir . '. Please ensure a dump file exists or set dump_file explicitly.');
+            return;
+        }
+
+        usort($dumpFiles, function (string $a, string $b): int {
+            return (int) filemtime($b) - (int) filemtime($a);
+        });
+
+        $dumpFile = basename($dumpFiles[0]);
+    }
+
+    $localPath = $dumpDir . '/' . $dumpFile;
+
+    if (! file_exists($localPath)) {
+        error('Local dump file not found: ' . $localPath);
+        return;
+    }
+
+    within('{{deploy_path}}/shared', function () use ($dumpFile, $localPath): void {
+        writeln('Reading remote .env file...');
+        $remoteEnvContent = run('cat .env');
+        $remoteEnv = fetchEnv($remoteEnvContent);
+
+        [$remoteDatabaseUser, $remoteDatabasePassword, $remoteDatabaseName] = extractDbCredentials($remoteEnv);
+
+        if (! isset($remoteDatabaseUser, $remoteDatabasePassword, $remoteDatabaseName)) {
+            error('Could not extract remote database credentials.');
+            return;
+        }
+
+        $remotePath = '{{deploy_path}}/shared/' . $dumpFile;
+        $remotePathArg = escapeshellarg($dumpFile);
+
+        writeln('Uploading database dump to remote: ' . $remotePath . '...');
+        upload($localPath, $remotePath);
+
+        writeln('Creating remote database...');
+        $remoteUserArg = escapeshellarg($remoteDatabaseUser);
+        $remotePassEnv = escapeshellarg($remoteDatabasePassword);
+        $remoteDbName = str_replace('`', '``', $remoteDatabaseName);
+        $createSql = 'DROP DATABASE IF EXISTS `' . $remoteDbName . '`; CREATE DATABASE `' . $remoteDbName . '`;';
+        run('MYSQL_PWD=' . $remotePassEnv . ' mysql -u ' . $remoteUserArg . ' -e ' . escapeshellarg($createSql));
+
+        writeln('Importing database dump into remote database...');
+        $remoteDbArg = escapeshellarg($remoteDatabaseName);
+        run('gunzip -c ' . $remotePathArg . ' | MYSQL_PWD=' . $remotePassEnv . ' mysql -u ' . $remoteUserArg . ' ' . $remoteDbArg);
+
+        writeln('Removing remote dump file...');
+        run('rm ' . $remotePathArg);
+    });
+
+    writeln('Removing local dump file...');
+    runLocally('rm ' . escapeshellarg($localPath));
+});
+
 // Download directories from remote to local.
 desc('Download directories from remote to local');
 task('lameco:download', function (): void {
@@ -196,6 +262,123 @@ task('lameco:upload', function (): void {
         upload($localDir, $remoteDir);
     }
 });
+
+// Sync database and files from one host to another.
+desc('Sync database and files from one host to another');
+task('lameco:sync', function (): void {
+    $deployer = Deployer::get();
+
+    $hostAliases = array_keys($deployer->hosts->all());
+
+    if (count($hostAliases) < 2) {
+        error('At least two hosts must be configured to use lameco:sync.');
+        return;
+    }
+
+    $source = (string) askChoice('Select source host (data will be copied FROM this host):', $hostAliases, 0);
+    $destination = (string) askChoice('Select destination host (data will be written TO this host):', $hostAliases, 1);
+
+    if ($source === $destination) {
+        error('Source and destination must be different hosts.');
+        return;
+    }
+
+    writeln('');
+    writeln('Sync plan:');
+    writeln('  Source:      ' . $source);
+    writeln('  Destination: ' . $destination);
+    writeln('');
+
+    if (! askConfirmation('This will overwrite the database and files on "' . $destination . '" with data from "' . $source . '". Continue?', false)) {
+        writeln('Sync cancelled.');
+        return;
+    }
+
+    $sourceHost = $deployer->hosts->get($source);
+    $destHost = $deployer->hosts->get($destination);
+
+    writeln('');
+    writeln('╔══════════════════════════════════════════════════════════════╗');
+    writeln('║                                                              ║');
+    writeln('║   ⚠  THIS WILL OVERWRITE DATA ON THE DESTINATION HOST       ║');
+    writeln('║                                                              ║');
+    writeln('║   Source:       ' . str_pad($source, 45) . '  ║');
+    writeln('║   Destination:  ' . str_pad($destination, 45) . '  ║');
+    writeln('║                                                              ║');
+    writeln('║   The database and uploaded files on the destination        ║');
+    writeln('║   will be permanently overwritten. This cannot be undone.   ║');
+    writeln('║                                                              ║');
+    writeln('╚══════════════════════════════════════════════════════════════╝');
+    writeln('');
+
+    if (! askConfirmation('Are you absolutely sure you want to proceed?', false)) {
+        writeln('Sync cancelled.');
+        return;
+    }
+
+    // Step 1: Download database dump from source (without local import).
+    // Note: this intentionally inlines the dump-and-download logic from lameco:db_download
+    // because lameco:sync must skip the local database import and local dump deletion steps.
+    writeln('');
+    writeln('→ Downloading database from ' . $source . '...');
+    on($sourceHost, function (): void {
+        within('{{deploy_path}}/shared', function (): void {
+            writeln('Reading remote .env file...');
+            $remoteEnvContent = run('cat .env');
+            $remoteEnv = fetchEnv($remoteEnvContent);
+
+            [$remoteDatabaseUser, $remoteDatabasePassword, $remoteDatabaseName] = extractDbCredentials($remoteEnv);
+
+            if (! isset($remoteDatabaseUser, $remoteDatabasePassword, $remoteDatabaseName)) {
+                error('Could not extract database credentials from source host.');
+                return;
+            }
+
+            $dumpFile = 'current_' . $remoteDatabaseName . '.sql.gz';
+            set('dump_file', $dumpFile);
+
+            $remotePath = '{{deploy_path}}/shared/{{dump_file}}';
+            $localPath = '{{lameco_dump_dir}}/{{dump_file}}';
+            $remotePathArg = escapeshellarg($dumpFile);
+
+            writeln('Creating database dump...');
+            $remoteUserArg = escapeshellarg($remoteDatabaseUser);
+            $remotePassEnv = escapeshellarg($remoteDatabasePassword);
+            $remoteDbArg = escapeshellarg($remoteDatabaseName);
+            run('MYSQL_PWD=' . $remotePassEnv . ' mysqldump --quick --single-transaction -u ' . $remoteUserArg . ' ' . $remoteDbArg . ' | gzip > ' . $remotePathArg);
+
+            writeln('Downloading dump to local...');
+            download($remotePath, $localPath);
+
+            writeln('Removing remote dump file...');
+            run('rm ' . $remotePathArg);
+        });
+    });
+
+    // Step 2: Upload database dump to destination and import.
+    writeln('');
+    writeln('→ Uploading database to ' . $destination . '...');
+    on($destHost, function (): void {
+        invoke('lameco:db_upload');
+    });
+
+    // Step 3: Download files from source.
+    writeln('');
+    writeln('→ Downloading files from ' . $source . '...');
+    on($sourceHost, function (): void {
+        invoke('lameco:download');
+    });
+
+    // Step 4: Upload files to destination.
+    writeln('');
+    writeln('→ Uploading files to ' . $destination . '...');
+    on($destHost, function (): void {
+        invoke('lameco:upload');
+    });
+
+    writeln('');
+    writeln('✔ Sync from ' . $source . ' to ' . $destination . ' completed.');
+})->once();
 
 // Build local assets.
 desc('Build local assets');
