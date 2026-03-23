@@ -104,6 +104,8 @@ Syncs the database and uploaded files from one remote host to another.
 - Requires confirmation before overwriting data on the destination host.
 - Downloads the source database as a gzipped dump (without importing locally), then uploads and imports it on the destination host via `lameco:db_upload`.
 - Downloads uploaded files from the source via `lameco:download`, then uploads them to the destination via `lameco:upload`.
+- Restarts PHP-FPM on the destination host via `lameco:restart_php` after the sync completes.
+- Restarts Supervisor on the destination host via `lameco:restart_supervisor` after the sync completes.
 - Typical usage: sync production data to staging.
 - Can also sync in the reverse direction if needed.
 

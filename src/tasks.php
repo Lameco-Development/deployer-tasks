@@ -376,6 +376,18 @@ task('lameco:sync', function (): void {
         invoke('lameco:upload');
     });
 
+    // Step 5: Restart PHP and Supervisor on destination.
+    writeln('');
+    writeln('→ Restarting PHP on ' . $destination . '...');
+    on($destHost, function (): void {
+        invoke('lameco:restart_php');
+    });
+
+    writeln('→ Restarting Supervisor on ' . $destination . '...');
+    on($destHost, function (): void {
+        invoke('lameco:restart_supervisor');
+    });
+
     writeln('');
     writeln('✔ Sync from ' . $source . ' to ' . $destination . ' completed.');
 })->once();
