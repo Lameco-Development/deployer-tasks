@@ -297,6 +297,25 @@ task('lameco:sync', function (): void {
     $sourceHost = $deployer->hosts->get($source);
     $destHost = $deployer->hosts->get($destination);
 
+    writeln('');
+    writeln('╔══════════════════════════════════════════════════════════════╗');
+    writeln('║                                                              ║');
+    writeln('║   ⚠  THIS WILL OVERWRITE DATA ON THE DESTINATION HOST       ║');
+    writeln('║                                                              ║');
+    writeln('║   Source:       ' . str_pad($source, 45) . '  ║');
+    writeln('║   Destination:  ' . str_pad($destination, 45) . '  ║');
+    writeln('║                                                              ║');
+    writeln('║   The database and uploaded files on the destination        ║');
+    writeln('║   will be permanently overwritten. This cannot be undone.   ║');
+    writeln('║                                                              ║');
+    writeln('╚══════════════════════════════════════════════════════════════╝');
+    writeln('');
+
+    if (! askConfirmation('Are you absolutely sure you want to proceed?', false)) {
+        writeln('Sync cancelled.');
+        return;
+    }
+
     // Step 1: Download database dump from source (without local import).
     // Note: this intentionally inlines the dump-and-download logic from lameco:db_download
     // because lameco:sync must skip the local database import and local dump deletion steps.
