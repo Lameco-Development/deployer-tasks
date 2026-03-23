@@ -63,6 +63,19 @@ Displays remote database credentials.
 
 ---
 
+### lameco:db_upload
+
+Uploads a local database dump to a remote host and imports it.
+
+- Looks for the dump file set in `dump_file` (automatically set by `lameco:db_download` and `lameco:sync`).
+- If `dump_file` is not set, auto-detects the most recently modified `current_*.sql.gz` in `lameco_dump_dir`.
+- Uploads the dump to `{{deploy_path}}/shared` on the remote server.
+- Reads the remote `.env` file to extract DB credentials.
+- Drops and recreates the remote database, then imports the dump.
+- Cleans up dump files both remotely and locally.
+
+---
+
 ### lameco:download
 
 Downloads directories from remote to local.
@@ -80,6 +93,27 @@ Uploads directories from local to remote.
 - Uploads each directory in `lameco_upload_dirs` from local to `{{deploy_path}}/shared` on the remote.
 - By default, uploads `['{{lameco_public_dir}}/uploads']`.
 - For Craft CMS projects, also uploads the `translations` directory by default.
+
+---
+
+### lameco:sync
+
+Syncs the database and uploaded files from one remote host to another.
+
+- Interactively prompts for a source host (data is copied **from**) and a destination host (data is written **to**).
+- Requires confirmation before overwriting data on the destination host.
+- Downloads the source database as a gzipped dump (without importing locally), then uploads and imports it on the destination host via `lameco:db_upload`.
+- Downloads uploaded files from the source via `lameco:download`, then uploads them to the destination via `lameco:upload`.
+- Typical usage: sync production data to staging.
+- Can also sync in the reverse direction if needed.
+
+**Example:**
+
+```bash
+dep lameco:sync
+```
+
+The task will prompt to select the source and destination hosts from the configured list.
 
 ---
 
