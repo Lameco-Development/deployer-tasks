@@ -461,6 +461,7 @@ task('lameco:upload_assets', function (): void {
 
             writeln('Uploading assets directory: ' . $dir . '...');
             upload($localDir, $remoteDir);
+            run('chmod -R 755 ' . $remoteDir);
         }
     }
 
