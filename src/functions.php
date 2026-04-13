@@ -140,6 +140,20 @@ function composerHasPackage(string $package): bool
 }
 
 /**
+ * Build an SSH command string from a Deployer Host object.
+ *
+ * @param \Deployer\Host\Host $host The Deployer host to build the SSH command for.
+ * @return string The SSH command prefix (e.g. "ssh -p 22 -i key user@host").
+ */
+function buildSshCommand(\Deployer\Host\Host $host): string
+{
+    $options = $host->connectionOptionsString();
+    $connection = escapeshellarg($host->connectionString());
+
+    return 'ssh' . ($options !== '' ? ' ' . $options : '') . ' ' . $connection;
+}
+
+/**
  * Determine if the current host is a staging environment.
  *
  * @return bool True if the current host is a staging environment, false otherwise.

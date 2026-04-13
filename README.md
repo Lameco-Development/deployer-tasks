@@ -67,7 +67,7 @@ Displays remote database credentials.
 
 Uploads a local database dump to a remote host and imports it.
 
-- Looks for the dump file set in `dump_file` (automatically set by `lameco:db_download` and `lameco:sync`).
+- Looks for the dump file set in `dump_file` (automatically set by `lameco:db_download`).
 - If `dump_file` is not set, auto-detects the most recently modified `current_*.sql.gz` in `lameco_dump_dir`.
 - Uploads the dump to `{{deploy_path}}/shared` on the remote server.
 - Reads the remote `.env` file to extract DB credentials.
@@ -98,16 +98,15 @@ Uploads directories from local to remote.
 
 ### lameco:sync
 
-Syncs the database and uploaded files from one remote host to another.
+Syncs the database and/or uploaded files from one remote host to another via SSH streaming.
 
+- Prompts to select a sync scope: **Database and files**, **Database only**, or **Files only**.
 - Interactively prompts for a source host (data is copied **from**) and a destination host (data is written **to**).
 - Requires confirmation before overwriting data on the destination host.
-- Downloads the source database as a gzipped dump (without importing locally), then uploads and imports it on the destination host via `lameco:db_upload`.
-- Downloads uploaded files from the source via `lameco:download`, then uploads them to the destination via `lameco:upload`.
-- Restarts PHP-FPM on the destination host via `lameco:restart_php` after the sync completes.
-- Restarts Supervisor on the destination host via `lameco:restart_supervisor` after the sync completes.
+- **Database sync**: streams the database directly between servers by piping `mysqldump | gzip` through SSH from source to `gunzip | mysql` on destination — no temporary files are written to disk.
+- **File sync**: streams directories between servers by piping `tar` through SSH — no temporary files are written to disk.
+- Restarts PHP-FPM and Supervisor on the destination host after the sync completes.
 - Typical usage: sync production data to staging.
-- Can also sync in the reverse direction if needed.
 
 **Example:**
 
@@ -115,7 +114,7 @@ Syncs the database and uploaded files from one remote host to another.
 dep lameco:sync
 ```
 
-The task will prompt to select the source and destination hosts from the configured list.
+The task will prompt to select the sync scope, source host, and destination host from the configured list.
 
 ---
 
