@@ -168,9 +168,7 @@ task('lameco:db_upload', function (): void {
             return;
         }
 
-        usort($dumpFiles, function (string $a, string $b): int {
-            return (int) filemtime($b) - (int) filemtime($a);
-        });
+        usort($dumpFiles, fn (string $a, string $b): int => (int) filemtime($b) - (int) filemtime($a));
 
         $dumpFile = basename($dumpFiles[0]);
     }
@@ -263,7 +261,7 @@ task('lameco:upload', function (): void {
     }
 });
 
-// Sync database and files from one host to another.
+// Sync database and files from one host to another via SSH streaming.
 desc('Sync database and files from one host to another');
 task('lameco:sync', function (): void {
     $deployer = Deployer::get();
@@ -275,6 +273,15 @@ task('lameco:sync', function (): void {
         return;
     }
 
+    $syncScope = (string) askChoice('Select what to sync:', [
+        'Database and files',
+        'Database only',
+        'Files only',
+    ], 0);
+
+    $syncDb = $syncScope !== 'Files only';
+    $syncFiles = $syncScope !== 'Database only';
+
     $source = (string) askChoice('Select source host (data will be copied FROM this host):', $hostAliases, 0);
     $destination = (string) askChoice('Select destination host (data will be written TO this host):', $hostAliases, 1);
 
@@ -283,19 +290,16 @@ task('lameco:sync', function (): void {
         return;
     }
 
-    writeln('');
-    writeln('Sync plan:');
-    writeln('  Source:      ' . $source);
-    writeln('  Destination: ' . $destination);
-    writeln('');
-
-    if (! askConfirmation('This will overwrite the database and files on "' . $destination . '" with data from "' . $source . '". Continue?', false)) {
-        writeln('Sync cancelled.');
-        return;
-    }
-
     $sourceHost = $deployer->hosts->get($source);
     $destHost = $deployer->hosts->get($destination);
+
+    if ($syncDb && $syncFiles) {
+        $scopeWarning = 'The database and uploaded files on the destination';
+    } elseif ($syncDb) {
+        $scopeWarning = 'The database on the destination';
+    } else {
+        $scopeWarning = 'The uploaded files on the destination';
+    }
 
     writeln('');
     writeln('╔══════════════════════════════════════════════════════════════╗');
@@ -304,8 +308,9 @@ task('lameco:sync', function (): void {
     writeln('║                                                              ║');
     writeln('║   Source:       ' . str_pad($source, 45) . '  ║');
     writeln('║   Destination:  ' . str_pad($destination, 45) . '  ║');
+    writeln('║   Scope:        ' . str_pad($syncScope, 45) . '  ║');
     writeln('║                                                              ║');
-    writeln('║   The database and uploaded files on the destination        ║');
+    writeln('║   ' . str_pad($scopeWarning, 59) . '║');
     writeln('║   will be permanently overwritten. This cannot be undone.   ║');
     writeln('║                                                              ║');
     writeln('╚══════════════════════════════════════════════════════════════╝');
@@ -316,67 +321,109 @@ task('lameco:sync', function (): void {
         return;
     }
 
-    // Step 1: Download database dump from source (without local import).
-    // Note: this intentionally inlines the dump-and-download logic from lameco:db_download
-    // because lameco:sync must skip the local database import and local dump deletion steps.
-    writeln('');
-    writeln('→ Downloading database from ' . $source . '...');
-    on($sourceHost, function (): void {
-        within('{{deploy_path}}/shared', function (): void {
-            writeln('Reading remote .env file...');
-            $remoteEnvContent = run('cat .env');
-            $remoteEnv = fetchEnv($remoteEnvContent);
+    $sourceSsh = buildSshCommand($sourceHost);
+    $destSsh = buildSshCommand($destHost);
 
-            [$remoteDatabaseUser, $remoteDatabasePassword, $remoteDatabaseName] = extractDbCredentials($remoteEnv);
+    // Stream database from source to destination via local pipe.
+    if ($syncDb) {
+        writeln('');
+        writeln('→ Reading database credentials...');
 
-            if (! isset($remoteDatabaseUser, $remoteDatabasePassword, $remoteDatabaseName)) {
-                error('Could not extract database credentials from source host.');
-                return;
-            }
+        $sourceDbUser = null;
+        $sourceDbPassword = null;
+        $sourceDbName = null;
 
-            $dumpFile = 'current_' . $remoteDatabaseName . '.sql.gz';
-            set('dump_file', $dumpFile);
-
-            $remotePath = '{{deploy_path}}/shared/{{dump_file}}';
-            $localPath = '{{lameco_dump_dir}}/{{dump_file}}';
-            $remotePathArg = escapeshellarg($dumpFile);
-
-            writeln('Creating database dump...');
-            $remoteUserArg = escapeshellarg($remoteDatabaseUser);
-            $remotePassEnv = escapeshellarg($remoteDatabasePassword);
-            $remoteDbArg = escapeshellarg($remoteDatabaseName);
-            run('MYSQL_PWD=' . $remotePassEnv . ' mysqldump --quick --single-transaction -u ' . $remoteUserArg . ' ' . $remoteDbArg . ' | gzip > ' . $remotePathArg);
-
-            writeln('Downloading dump to local...');
-            download($remotePath, $localPath);
-
-            writeln('Removing remote dump file...');
-            run('rm ' . $remotePathArg);
+        on($sourceHost, function () use (&$sourceDbUser, &$sourceDbPassword, &$sourceDbName): void {
+            within('{{deploy_path}}/shared', function () use (&$sourceDbUser, &$sourceDbPassword, &$sourceDbName): void {
+                $envContent = run('cat .env');
+                $env = fetchEnv($envContent);
+                [$sourceDbUser, $sourceDbPassword, $sourceDbName] = extractDbCredentials($env);
+            });
         });
-    });
 
-    // Step 2: Upload database dump to destination and import.
-    writeln('');
-    writeln('→ Uploading database to ' . $destination . '...');
-    on($destHost, function (): void {
-        invoke('lameco:db_upload');
-    });
+        if (! isset($sourceDbUser, $sourceDbPassword, $sourceDbName)) {
+            error('Could not extract database credentials from source host.');
+            return;
+        }
 
-    // Step 3: Download files from source.
-    writeln('');
-    writeln('→ Downloading files from ' . $source . '...');
-    on($sourceHost, function (): void {
-        invoke('lameco:download');
-    });
+        $destDbUser = null;
+        $destDbPassword = null;
+        $destDbName = null;
 
-    // Step 4: Upload files to destination.
-    writeln('');
-    writeln('→ Uploading files to ' . $destination . '...');
-    on($destHost, function (): void {
-        invoke('lameco:upload');
-    });
+        on($destHost, function () use (&$destDbUser, &$destDbPassword, &$destDbName): void {
+            within('{{deploy_path}}/shared', function () use (&$destDbUser, &$destDbPassword, &$destDbName): void {
+                $envContent = run('cat .env');
+                $env = fetchEnv($envContent);
+                [$destDbUser, $destDbPassword, $destDbName] = extractDbCredentials($env);
+            });
+        });
 
-    // Step 5: Restart PHP and Supervisor on destination.
+        if (! isset($destDbUser, $destDbPassword, $destDbName)) {
+            error('Could not extract database credentials from destination host.');
+            return;
+        }
+
+        writeln('→ Preparing destination database...');
+        $destDbNameEscaped = str_replace('`', '``', $destDbName);
+        $createSql = 'DROP DATABASE IF EXISTS `' . $destDbNameEscaped . '`; CREATE DATABASE `' . $destDbNameEscaped . '`;';
+        $prepCmd = 'MYSQL_PWD=' . escapeshellarg((string) $destDbPassword)
+            . ' mysql -u ' . escapeshellarg((string) $destDbUser)
+            . ' -e ' . escapeshellarg($createSql);
+        runLocally($destSsh . ' ' . escapeshellarg($prepCmd));
+
+        writeln('→ Streaming database from ' . $source . ' to ' . $destination . '...');
+        $dumpCmd = 'MYSQL_PWD=' . escapeshellarg((string) $sourceDbPassword)
+            . ' mysqldump --quick --single-transaction -u ' . escapeshellarg((string) $sourceDbUser)
+            . ' ' . escapeshellarg((string) $sourceDbName) . ' | gzip';
+        $importCmd = 'gunzip | MYSQL_PWD=' . escapeshellarg((string) $destDbPassword)
+            . ' mysql -u ' . escapeshellarg((string) $destDbUser)
+            . ' ' . escapeshellarg((string) $destDbName);
+        runLocally(
+            $sourceSsh . ' ' . escapeshellarg($dumpCmd) . ' | ' . $destSsh . ' ' . escapeshellarg($importCmd),
+            [
+                'timeout' => null,
+            ],
+        );
+    }
+
+    // Stream files from source to destination via tar pipe.
+    if ($syncFiles) {
+        $downloadDirs = [];
+        $sourceDeployPath = '';
+        $destDeployPath = '';
+
+        on($sourceHost, function () use (&$downloadDirs, &$sourceDeployPath): void {
+            $downloadDirs = array_map(fn (string $dir): string => parse($dir), get('lameco_download_dirs'));
+            $sourceDeployPath = run('echo {{deploy_path}}');
+        });
+
+        on($destHost, function () use (&$destDeployPath): void {
+            $destDeployPath = run('echo {{deploy_path}}');
+        });
+
+        if (empty($downloadDirs)) {
+            writeln('No directories configured for sync.');
+        } else {
+            foreach ($downloadDirs as $dir) {
+                writeln('');
+                writeln('→ Streaming directory ' . $dir . ' from ' . $source . ' to ' . $destination . '...');
+
+                $mkdirCmd = 'mkdir -p ' . escapeshellarg($destDeployPath . '/shared/' . $dir);
+                runLocally($destSsh . ' ' . escapeshellarg($mkdirCmd));
+
+                $tarSource = 'tar czf - -C ' . escapeshellarg($sourceDeployPath . '/shared') . ' ' . escapeshellarg($dir);
+                $tarDest = 'tar xzf - -C ' . escapeshellarg($destDeployPath . '/shared');
+                runLocally(
+                    $sourceSsh . ' ' . escapeshellarg($tarSource) . ' | ' . $destSsh . ' ' . escapeshellarg($tarDest),
+                    [
+                        'timeout' => null,
+                    ],
+                );
+            }
+        }
+    }
+
+    // Restart services on destination.
     writeln('');
     writeln('→ Restarting PHP on ' . $destination . '...');
     on($destHost, function (): void {
