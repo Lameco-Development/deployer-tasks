@@ -63,6 +63,30 @@ Displays remote database credentials.
 
 ---
 
+### lameco:db_open
+
+Opens the remote database of the selected host in [Sequel Ace](https://github.com/Sequel-Ace/Sequel-Ace), tunneled over SSH with your local SSH key.
+
+- Reads the remote `.env` file and extracts DB user, password, name, host and port (supports Symfony `DATABASE_URL`, Craft `CRAFT_DB_*` and Laravel `DB_*`).
+- Reads SSH host, port and user from the Deployer host config.
+- Resolves the SSH key: uses the host's `identity_file` if set, otherwise falls back to the first existing of `~/.ssh/id_ed25519`, `~/.ssh/id_rsa`.
+- Builds a `mysql://` URL with Sequel Ace's `ssh_*` query parameters and launches it via `open`. Sequel Ace then establishes the tunnel itself.
+- macOS only. Errors out clearly on other platforms or when credentials/SSH key cannot be resolved.
+
+**Example:**
+
+```bash
+dep lameco:db_open staging
+dep lameco:db_open production
+```
+
+**Notes:**
+
+- Sequel Ace must have sandbox access to the SSH key file — grant it in **Settings → Files**.
+- Sequel Ace uses its own strict `ssh_known_hosts` file (under `~/Library/Containers/com.sequel-ace.sequel-ace/Data/.keys/`). On the first connection to a new host, the host key needs to be added — e.g. `ssh-keyscan -p 22 host.example.com >> ~/Library/Containers/com.sequel-ace.sequel-ace/Data/.keys/ssh_known_hosts_strict`.
+
+---
+
 ### lameco:db_upload
 
 Uploads a local database dump to a remote host and imports it.
