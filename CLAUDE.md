@@ -43,3 +43,14 @@ All source code lives in `src/` with three files:
 - Always use `escapeshellarg()` for shell-interpolated values
 - ECS enforces PSR-12, common presets, clean code presets, and PHP 8.4 migration rules
 - Deployer tasks use `run()` for remote commands and `runLocally()` for local commands
+
+## Commit Messages
+
+This repo uses [Conventional Commits](https://www.conventionalcommits.org/) — release-please reads them to determine version bumps and generate `CHANGELOG.md`. Always use one of the recognized prefixes:
+
+- `feat:` — minor bump, appears under "Features" in the changelog
+- `fix:` — patch bump, appears under "Bug Fixes"
+- `feat!:` (or any commit with `BREAKING CHANGE:` footer) — major bump
+- `docs:`, `chore:`, `refactor:`, `style:`, `test:`, `ci:`, `build:` — no version bump, no changelog entry
+
+Prefer a descriptive subject line under ~72 chars; add a body when context matters (the body is included in the changelog entry).

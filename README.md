@@ -253,6 +253,23 @@ set('lameco_php_config', 'php-fpm-customuser.service');
 - Supervisor and PHP-FPM restarts are configurable and can be disabled per project.
 - For staging hosts, configure a deployment branch (or pass `--branch`) if `release/*` branches exist to avoid ambiguous deployments.
 
+## Contributing
+
+### Commit messages
+
+This repository uses [Conventional Commits](https://www.conventionalcommits.org/). Release tags, GitHub Releases and `CHANGELOG.md` are produced automatically by [release-please](https://github.com/googleapis/release-please) based on commit prefixes:
+
+| Prefix | Effect on next release |
+|---|---|
+| `feat:` | Minor bump (e.g. `1.4.0` → `1.5.0`), listed under **Features** in the changelog |
+| `fix:` | Patch bump (e.g. `1.4.0` → `1.4.1`), listed under **Bug Fixes** |
+| `feat!:` or any commit with a `BREAKING CHANGE:` footer | Major bump (e.g. `1.4.0` → `2.0.0`) |
+| `docs:`, `chore:`, `refactor:`, `style:`, `test:`, `ci:`, `build:` | No version bump, no changelog entry |
+
+Example: `feat: add lameco:db_open task to open remote DB in Sequel Ace via SSH tunnel`
+
+When release-please detects a releasable commit on `main`, it opens (or updates) a **"chore: release X.Y.Z"** PR. Merging that PR creates the git tag and a GitHub Release; Packagist auto-discovers the tag.
+
 ## License
 
 This package is open-sourced software licensed under the MIT license.
