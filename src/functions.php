@@ -101,6 +101,72 @@ function extractDbCredentials(array $env): array
 }
 
 /**
+ * Extract database host and port from an environment array.
+ * Supports DATABASE_URL (Symfony), CRAFT_DB_* (Craft CMS), and Laravel style.
+ *
+ * @param array $env Associative array of environment variables.
+ * @return array Array with [host, port] or [null, null] if not found.
+ */
+function extractDbHostPort(array $env): array
+{
+    if (! empty($env['DATABASE_URL'])) {
+        $url = (string) $env['DATABASE_URL'];
+        $parts = parse_url($url);
+        if (is_array($parts) && (! isset($parts['scheme']) || in_array($parts['scheme'], ['mysql', 'mariadb'], true))) {
+            $host = isset($parts['host']) ? rawurldecode($parts['host']) : null;
+            $port = isset($parts['port']) ? (int) $parts['port'] : null;
+            return [$host, $port];
+        }
+    } elseif (! empty($env['CRAFT_DB_DATABASE'])) {
+        return [
+            $env['CRAFT_DB_SERVER'] ?? null,
+            isset($env['CRAFT_DB_PORT']) ? (int) $env['CRAFT_DB_PORT'] : null,
+        ];
+    } elseif (! empty($env['DB_DATABASE'])) {
+        return [
+            $env['DB_HOST'] ?? null,
+            isset($env['DB_PORT']) ? (int) $env['DB_PORT'] : null,
+        ];
+    }
+    return [null, null];
+}
+
+/**
+ * Resolve the SSH identity file to use for a Deployer host.
+ * Falls back to the first existing of ~/.ssh/id_ed25519, ~/.ssh/id_rsa.
+ *
+ * @param \Deployer\Host\Host $host The Deployer host.
+ * @return string|null Absolute path to the identity file, or null if none found.
+ */
+function resolveSshIdentityFile(\Deployer\Host\Host $host): ?string
+{
+    $home = $_SERVER['HOME'] ?? getenv('HOME') ?: null;
+
+    $configured = $host->getIdentityFile();
+    if ($configured !== null && $configured !== '') {
+        if ($home !== null && str_starts_with($configured, '~/')) {
+            $configured = $home . substr($configured, 1);
+        }
+        if (file_exists($configured)) {
+            return $configured;
+        }
+    }
+
+    if ($home === null) {
+        return null;
+    }
+
+    foreach (['id_ed25519', 'id_rsa'] as $name) {
+        $path = $home . '/.ssh/' . $name;
+        if (file_exists($path)) {
+            return $path;
+        }
+    }
+
+    return null;
+}
+
+/**
  * Determine if the given Node.js version supports Corepack.
  *
  * @param string $versionString Node.js version string (e.g. "v16.13.0").

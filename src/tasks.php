@@ -153,6 +153,68 @@ task('lameco:db_credentials', function (): void {
     });
 });
 
+// Open the remote database in Sequel Ace via SSH tunnel.
+desc('Open the remote database in Sequel Ace via SSH tunnel');
+task('lameco:db_open', function (): void {
+    if (PHP_OS_FAMILY !== 'Darwin') {
+        error('lameco:db_open requires macOS (uses the `open` command and Sequel Ace URL scheme).');
+        return;
+    }
+
+    $host = currentHost();
+    if (! $host) {
+        error('No host selected.');
+        return;
+    }
+
+    $sshHost = $host->getHostname();
+    $sshUser = $host->getRemoteUser();
+    $sshPort = $host->getPort() ?: 22;
+
+    if (! $sshHost || ! $sshUser) {
+        error('Host is missing hostname or remote user.');
+        return;
+    }
+
+    $sshKey = resolveSshIdentityFile($host);
+    if ($sshKey === null) {
+        error('Could not find an SSH identity file. Set `identity_file` on the host, or place a key at ~/.ssh/id_ed25519 or ~/.ssh/id_rsa.');
+        return;
+    }
+
+    within('{{deploy_path}}/shared', function () use ($sshHost, $sshPort, $sshUser, $sshKey): void {
+        $envContent = run('cat .env');
+        $env = fetchEnv($envContent);
+
+        [$dbUser, $dbPass, $dbName] = extractDbCredentials($env);
+        if (! isset($dbUser, $dbPass, $dbName)) {
+            error('Could not extract remote database credentials.');
+            return;
+        }
+
+        [$dbHost, $dbPort] = extractDbHostPort($env);
+        $dbHost ??= '127.0.0.1';
+        $dbPort ??= 3306;
+
+        $query = http_build_query([
+            'ssh_host' => $sshHost,
+            'ssh_port' => $sshPort,
+            'ssh_user' => $sshUser,
+            'ssh_keyLocation' => $sshKey,
+            'ssh_keyLocationEnabled' => '1',
+        ], '', '&', PHP_QUERY_RFC3986);
+
+        $url = 'mysql://'
+            . rawurlencode((string) $dbUser) . ':' . rawurlencode((string) $dbPass)
+            . '@' . $dbHost . ':' . $dbPort
+            . '/' . rawurlencode((string) $dbName)
+            . '?' . $query;
+
+        writeln('Opening connection in Sequel Ace...');
+        runLocally('open ' . escapeshellarg($url));
+    });
+});
+
 // Upload a local database dump to remote and import it.
 desc('Upload local database dump to remote and import it');
 task('lameco:db_upload', function (): void {
