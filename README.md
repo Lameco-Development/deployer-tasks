@@ -6,6 +6,7 @@ A collection of common tasks for [Deployer](https://deployer.org/) to streamline
 
 - PHP 8.4 or higher
 - Deployer 7.0 or higher
+- MariaDB client tools (`mariadb` and `mariadb-dump`) on every host that runs the database tasks (`lameco:db_download`, `lameco:db_upload`, `lameco:sync`, `lameco:deactivate`) — both locally and on each remote host. The legacy `mysql` / `mysqldump` binaries are no longer invoked; see [Upgrading from 1.x](#upgrading-from-1x).
 
 ## Installation
 
@@ -252,6 +253,23 @@ set('lameco_php_config', 'php-fpm-customuser.service');
 - `lameco:build_assets` expects nvm in `$NVM_DIR` (or `~/.nvm`) and uses `bash -lc` to load it.
 - Supervisor and PHP-FPM restarts are configurable and can be disabled per project.
 - For staging hosts, configure a deployment branch (or pass `--branch`) if `release/*` branches exist to avoid ambiguous deployments.
+
+## Upgrading from 1.x
+
+Version 2.0 switches all database CLI invocations from `mysql` / `mysqldump` to `mariadb` / `mariadb-dump`. This is a breaking change: the affected tasks (`lameco:db_download`, `lameco:db_upload`, `lameco:sync`, `lameco:deactivate`) will fail with `command not found` on any host where only the legacy MySQL client is installed.
+
+To upgrade:
+
+1. Install the MariaDB client package locally and on every remote host that runs the database tasks.
+   - On Debian/Ubuntu: `apt install mariadb-client`.
+   - On macOS via Homebrew: `brew install mariadb`.
+2. If you cannot install the MariaDB client on a given host, create symlinks as a stopgap:
+   ```bash
+   ln -s "$(command -v mysql)"     /usr/local/bin/mariadb
+   ln -s "$(command -v mysqldump)" /usr/local/bin/mariadb-dump
+   ```
+3. The `MYSQL_PWD` environment variable is still used for password handling — the MariaDB client honors it for backward compatibility, so no credential changes are required.
+4. The `lameco:db_open` task still builds a `mysql://` URL for Sequel Ace; that is a Sequel Ace URL scheme and is unaffected.
 
 ## Contributing
 
