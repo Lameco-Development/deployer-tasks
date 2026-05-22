@@ -95,7 +95,7 @@ task('lameco:db_download', function (): void {
         $remoteUserArg = escapeshellarg($remoteDatabaseUser);
         $remotePassEnv = escapeshellarg($remoteDatabasePassword);
         $remoteDbArg = escapeshellarg($remoteDatabaseName);
-        run('MYSQL_PWD=' . $remotePassEnv . ' mysqldump --quick --single-transaction -u ' . $remoteUserArg . ' ' . $remoteDbArg . ' | gzip > ' . $remotePathArg);
+        run('MYSQL_PWD=' . $remotePassEnv . ' mariadb-dump --quick --single-transaction -u ' . $remoteUserArg . ' ' . $remoteDbArg . ' | gzip > ' . $remotePathArg);
 
         writeln('Downloading database dump to local path: ' . $localPath . '...');
         download($remotePath, $localPath);
@@ -125,10 +125,10 @@ task('lameco:db_download', function (): void {
     $localPassEnv = escapeshellarg((string) $localDatabasePassword);
     $localDbName = str_replace('`', '``', $localDatabaseName);
     $createSql = 'DROP DATABASE IF EXISTS `' . $localDbName . '`; CREATE DATABASE `' . $localDbName . '`;';
-    runLocally('MYSQL_PWD=' . $localPassEnv . ' mysql -u ' . $localUserArg . ' -e ' . escapeshellarg($createSql));
+    runLocally('MYSQL_PWD=' . $localPassEnv . ' mariadb -u ' . $localUserArg . ' -e ' . escapeshellarg($createSql));
 
     writeln('Importing database dump into local database...');
-    runLocally('gunzip -c ' . $localPathArg . ' | MYSQL_PWD=' . $localPassEnv . ' mysql -u ' . $localUserArg . ' ' . escapeshellarg((string) $localDatabaseName));
+    runLocally('gunzip -c ' . $localPathArg . ' | MYSQL_PWD=' . $localPassEnv . ' mariadb -u ' . $localUserArg . ' ' . escapeshellarg((string) $localDatabaseName));
 
     writeln('Removing local dump file...');
     runLocally('rm ' . $localPathArg);
@@ -265,11 +265,11 @@ task('lameco:db_upload', function (): void {
         $remotePassEnv = escapeshellarg($remoteDatabasePassword);
         $remoteDbName = str_replace('`', '``', $remoteDatabaseName);
         $createSql = 'DROP DATABASE IF EXISTS `' . $remoteDbName . '`; CREATE DATABASE `' . $remoteDbName . '`;';
-        run('MYSQL_PWD=' . $remotePassEnv . ' mysql -u ' . $remoteUserArg . ' -e ' . escapeshellarg($createSql));
+        run('MYSQL_PWD=' . $remotePassEnv . ' mariadb -u ' . $remoteUserArg . ' -e ' . escapeshellarg($createSql));
 
         writeln('Importing database dump into remote database...');
         $remoteDbArg = escapeshellarg($remoteDatabaseName);
-        run('gunzip -c ' . $remotePathArg . ' | MYSQL_PWD=' . $remotePassEnv . ' mysql -u ' . $remoteUserArg . ' ' . $remoteDbArg);
+        run('gunzip -c ' . $remotePathArg . ' | MYSQL_PWD=' . $remotePassEnv . ' mariadb -u ' . $remoteUserArg . ' ' . $remoteDbArg);
 
         writeln('Removing remote dump file...');
         run('rm ' . $remotePathArg);
@@ -429,16 +429,16 @@ task('lameco:sync', function (): void {
         $destDbNameEscaped = str_replace('`', '``', $destDbName);
         $createSql = 'DROP DATABASE IF EXISTS `' . $destDbNameEscaped . '`; CREATE DATABASE `' . $destDbNameEscaped . '`;';
         $prepCmd = 'MYSQL_PWD=' . escapeshellarg((string) $destDbPassword)
-            . ' mysql -u ' . escapeshellarg((string) $destDbUser)
+            . ' mariadb -u ' . escapeshellarg((string) $destDbUser)
             . ' -e ' . escapeshellarg($createSql);
         runLocally($destSsh . ' ' . escapeshellarg($prepCmd));
 
         writeln('→ Streaming database from ' . $source . ' to ' . $destination . '...');
         $dumpCmd = 'MYSQL_PWD=' . escapeshellarg((string) $sourceDbPassword)
-            . ' mysqldump --quick --single-transaction -u ' . escapeshellarg((string) $sourceDbUser)
+            . ' mariadb-dump --quick --single-transaction -u ' . escapeshellarg((string) $sourceDbUser)
             . ' ' . escapeshellarg((string) $sourceDbName) . ' | gzip';
         $importCmd = 'gunzip | MYSQL_PWD=' . escapeshellarg((string) $destDbPassword)
-            . ' mysql -u ' . escapeshellarg((string) $destDbUser)
+            . ' mariadb -u ' . escapeshellarg((string) $destDbUser)
             . ' ' . escapeshellarg((string) $destDbName);
         runLocally(
             $sourceSsh . ' ' . escapeshellarg($dumpCmd) . ' | ' . $destSsh . ' ' . escapeshellarg($importCmd),
@@ -766,10 +766,10 @@ task('lameco:deactivate', function (): void {
             $dbArg = escapeshellarg($dbName);
 
             // Drop all tables but keep the database itself
-            $dropCmd = 'MYSQL_PWD=' . $passEnv . ' mysqldump --no-data -u ' . $userArg . ' ' . $dbArg
+            $dropCmd = 'MYSQL_PWD=' . $passEnv . ' mariadb-dump --no-data -u ' . $userArg . ' ' . $dbArg
                 . ' | grep "^DROP"'
                 . ' | (echo "SET FOREIGN_KEY_CHECKS=0;"; cat; echo "SET FOREIGN_KEY_CHECKS=1;")'
-                . ' | MYSQL_PWD=' . $passEnv . ' mysql -u ' . $userArg . ' ' . $dbArg;
+                . ' | MYSQL_PWD=' . $passEnv . ' mariadb -u ' . $userArg . ' ' . $dbArg;
             run($dropCmd);
             writeln('  Alle tabellen in "' . $dbName . '" verwijderd.');
         });
