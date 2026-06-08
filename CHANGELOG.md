@@ -1,5 +1,12 @@
 # Changelog
 
+## [2.1.0](https://github.com/Lameco-Development/deployer-tasks/compare/2.0.0...2.1.0) (2026-06-08)
+
+
+### Features
+
+* support Deployer 8 alongside Deployer 7 ([#63](https://github.com/Lameco-Development/deployer-tasks/issues/63)) ([4d996c8](https://github.com/Lameco-Development/deployer-tasks/commit/4d996c81ae04d86d94e08f3084f4704686c0e41b))
+
 ## [2.0.0](https://github.com/Lameco-Development/deployer-tasks/compare/1.4.1...2.0.0) (2026-05-22)
 
 
