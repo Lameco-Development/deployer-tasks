@@ -440,11 +440,8 @@ task('lameco:sync', function (): void {
         $importCmd = 'gunzip | MYSQL_PWD=' . escapeshellarg((string) $destDbPassword)
             . ' mariadb -u ' . escapeshellarg((string) $destDbUser)
             . ' ' . escapeshellarg((string) $destDbName);
-        runLocally(
+        runLocallyWithoutTimeout(
             $sourceSsh . ' ' . escapeshellarg($dumpCmd) . ' | ' . $destSsh . ' ' . escapeshellarg($importCmd),
-            [
-                'timeout' => null,
-            ],
         );
     }
 
@@ -475,11 +472,8 @@ task('lameco:sync', function (): void {
 
                 $tarSource = 'tar czf - -C ' . escapeshellarg($sourceDeployPath . '/shared') . ' ' . escapeshellarg($dir);
                 $tarDest = 'tar xzf - -C ' . escapeshellarg($destDeployPath . '/shared');
-                runLocally(
+                runLocallyWithoutTimeout(
                     $sourceSsh . ' ' . escapeshellarg($tarSource) . ' | ' . $destSsh . ' ' . escapeshellarg($tarDest),
-                    [
-                        'timeout' => null,
-                    ],
                 );
             }
         }
