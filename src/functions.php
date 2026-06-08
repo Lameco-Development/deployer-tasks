@@ -213,10 +213,39 @@ function composerHasPackage(string $package): bool
  */
 function buildSshCommand(\Deployer\Host\Host $host): string
 {
-    $options = $host->connectionOptionsString();
+    // Deployer 8 removed Host::connectionOptionsString()/connectionOptionsArray();
+    // only connectionOptions(): array remains. Reproduce v7's exact formatting
+    // (implode of escapeshellarg'd flags) from whichever accessor the engine exposes.
+    $optionsArray = method_exists($host, 'connectionOptions')
+        ? $host->connectionOptions()        // Deployer 8
+        : $host->connectionOptionsArray();  // Deployer 7
+    $options = implode(' ', array_map(escapeshellarg(...), $optionsArray));
     $connection = escapeshellarg($host->connectionString());
 
     return 'ssh' . ($options !== '' ? ' ' . $options : '') . ' ' . $connection;
+}
+
+/**
+ * Run a command locally with no timeout, compatible with Deployer 7 and 8.
+ *
+ * Deployer 7's runLocally() accepts an options array as its 2nd positional
+ * argument (['timeout' => null]); Deployer 8 removed that form (the 2nd/3rd
+ * positionals are now ?string $cwd / ?int $timeout). Branch on the v8-only
+ * Host::connectionOptions() to pick the correct call shape; 0 disables the
+ * timeout identically to v7's null.
+ *
+ * @param string $command The command to run locally.
+ * @return string The command output.
+ */
+function runLocallyWithoutTimeout(string $command): string
+{
+    if (method_exists(\Deployer\Host\Host::class, 'connectionOptions')) {
+        return runLocally($command, null, 0);
+    }
+
+    return runLocally($command, [
+        'timeout' => null,
+    ]);
 }
 
 /**
