@@ -111,3 +111,9 @@ set('lameco_supervisor_configs', ['{{http_user}}.conf']);
 
 set('lameco_restart_php', true);
 set('lameco_php_config', 'php-fpm-{{http_user}}.service');
+
+// Take a gzipped mariadb-dump of the live database into shared/backups before
+// running migrations on deploy. This is the real recovery path: `dep rollback`
+// only repoints the code symlink and down() migrations are often lossy.
+set('lameco_db_backup_on_deploy', true);
+set('lameco_db_backup_keep', 5);
