@@ -153,6 +153,40 @@ task('lameco:db_credentials', function (): void {
     });
 });
 
+// Back up the remote database into shared/backups, keeping the newest N.
+desc('Back up the remote database into shared/backups (keeps the newest N)');
+task('lameco:db_backup', function (): void {
+    within('{{deploy_path}}/shared', function (): void {
+        $env = fetchEnv(run('cat .env'));
+
+        [$dbUser, $dbPassword, $dbName] = extractDbCredentials($env);
+
+        if (! isset($dbUser, $dbPassword, $dbName)) {
+            // Fail the deploy rather than migrate without a backup. Set
+            // lameco_db_backup_on_deploy to false to opt out deliberately.
+            error('Could not extract remote database credentials — refusing to migrate without a backup.');
+            throw new GracefulShutdownException('Database backup aborted: missing credentials.');
+        }
+
+        writeln('Backing up database "' . $dbName . '" to shared/backups...');
+        // Pass the name through a shell var so it is safely quoted in both the
+        // dump argument and the timestamped filename (which needs $(date) live).
+        run(
+            'DB=' . escapeshellarg($dbName) . '; '
+            . 'mkdir -p backups && '
+            . 'MYSQL_PWD=' . escapeshellarg($dbPassword) . ' mariadb-dump --quick --single-transaction -u '
+            . escapeshellarg($dbUser) . ' "$DB" '
+            . '| gzip > "backups/${DB}_$(date +%Y%m%d_%H%M%S).sql.gz"',
+        );
+
+        $keep = (int) get('lameco_db_backup_keep');
+        if ($keep > 0) {
+            writeln('Pruning old backups (keeping newest ' . $keep . ')...');
+            run('ls -1t backups/*.sql.gz 2>/dev/null | tail -n +' . ($keep + 1) . ' | xargs -r rm -f');
+        }
+    });
+});
+
 // Open the remote database in Sequel Ace via SSH tunnel.
 desc('Open the remote database in Sequel Ace via SSH tunnel');
 task('lameco:db_open', function (): void {
@@ -891,4 +925,7 @@ after('deploy:success', 'lameco:update_htpasswd');
 
 if (in_array(get('lameco_project_type'), ['symfony', 'kunstmaan'], true)) {
     before('deploy:symlink', 'database:migrate');
+    if (get('lameco_db_backup_on_deploy')) {
+        before('database:migrate', 'lameco:db_backup');
+    }
 }
