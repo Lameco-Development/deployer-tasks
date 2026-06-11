@@ -1,5 +1,14 @@
 # Changelog
 
+## [2.2.0](https://github.com/Lameco-Development/deployer-tasks/compare/2.1.0...2.2.0) (2026-06-11)
+
+
+### Features
+
+* add local endpoint support to lameco:sync ([ef91d38](https://github.com/Lameco-Development/deployer-tasks/commit/ef91d3814beb5a665d70a2594f7d72db9f92ded1))
+* default lameco:sync to production -&gt; staging selection ([f0f23db](https://github.com/Lameco-Development/deployer-tasks/commit/f0f23db41cc696f3ff92155c0ccfa5e29499e1c0))
+* order lameco:sync endpoints as local, staging, then production ([6369035](https://github.com/Lameco-Development/deployer-tasks/commit/6369035e1b2ba47f3102431c0819f94588198a64))
+
 ## [2.1.0](https://github.com/Lameco-Development/deployer-tasks/compare/2.0.0...2.1.0) (2026-06-08)
 
 
