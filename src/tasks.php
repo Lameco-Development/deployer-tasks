@@ -273,29 +273,27 @@ task('lameco:sync', function (): void {
         return;
     }
 
-    // The local machine is always available as an endpoint, alongside the hosts.
-    $endpoints = ['local', ...$hostAliases];
-
-    // Default to the typical production -> staging flow: source is the first
-    // non-staging (production-like) host, destination is the first staging host.
-    // This keeps the destination on a staging environment by default for safety,
-    // even when multiple production hosts are configured.
-    $firstStagingIndex = null;
-    $firstProductionIndex = null;
-    foreach ($endpoints as $index => $endpoint) {
-        if ($endpoint === 'local') {
-            continue;
-        }
-
-        if (hostIsStaging($deployer->hosts->get($endpoint))) {
-            $firstStagingIndex ??= $index;
+    // Group hosts by environment so the list always reads local, then staging
+    // host(s), then production and any other host(s) — each group keeping its
+    // deploy.php declaration order.
+    $stagingHosts = [];
+    $otherHosts = [];
+    foreach ($hostAliases as $alias) {
+        if (hostIsStaging($deployer->hosts->get($alias))) {
+            $stagingHosts[] = $alias;
         } else {
-            $firstProductionIndex ??= $index;
+            $otherHosts[] = $alias;
         }
     }
 
-    $defaultSource = $firstProductionIndex ?? 0;
-    $defaultDestination = $firstStagingIndex ?? ($defaultSource === 0 ? array_key_last($endpoints) : 0);
+    // The local machine is always available as an endpoint, alongside the hosts.
+    $endpoints = ['local', ...$stagingHosts, ...$otherHosts];
+
+    // Default to the typical production -> staging flow for safety: source is the
+    // first non-staging (production-like) host, destination is the first staging
+    // host. Falls back to local when no host of that kind is configured.
+    $defaultSource = $otherHosts !== [] ? (int) array_search($otherHosts[0], $endpoints, true) : 0;
+    $defaultDestination = $stagingHosts !== [] ? (int) array_search($stagingHosts[0], $endpoints, true) : 0;
 
     $syncScope = (string) askChoice('Select what to sync:', [
         'Database and files',
