@@ -6,6 +6,7 @@ A collection of common tasks for [Deployer](https://deployer.org/) to streamline
 
 - PHP 8.4 or higher
 - Deployer 7.0 or higher
+- MariaDB client tools (`mariadb` and `mariadb-dump`) on every host that runs the database tasks (`lameco:db_download`, `lameco:db_upload`, `lameco:sync`, `lameco:deactivate`) — both locally and on each remote host. The legacy `mysql` / `mysqldump` binaries are no longer invoked; see [Upgrading from 1.x](#upgrading-from-1x).
 
 ## Installation
 
@@ -63,6 +64,30 @@ Displays remote database credentials.
 
 ---
 
+### lameco:db_open
+
+Opens the remote database of the selected host in [Sequel Ace](https://github.com/Sequel-Ace/Sequel-Ace), tunneled over SSH with your local SSH key.
+
+- Reads the remote `.env` file and extracts DB user, password, name, host and port (supports Symfony `DATABASE_URL`, Craft `CRAFT_DB_*` and Laravel `DB_*`).
+- Reads SSH host, port and user from the Deployer host config.
+- Resolves the SSH key: uses the host's `identity_file` if set, otherwise falls back to the first existing of `~/.ssh/id_ed25519`, `~/.ssh/id_rsa`.
+- Builds a `mysql://` URL with Sequel Ace's `ssh_*` query parameters and launches it via `open`. Sequel Ace then establishes the tunnel itself.
+- macOS only. Errors out clearly on other platforms or when credentials/SSH key cannot be resolved.
+
+**Example:**
+
+```bash
+dep lameco:db_open staging
+dep lameco:db_open production
+```
+
+**Notes:**
+
+- Sequel Ace must have sandbox access to the SSH key file — grant it in **Settings → Files**.
+- Sequel Ace uses its own strict `ssh_known_hosts` file (under `~/Library/Containers/com.sequel-ace.sequel-ace/Data/.keys/`). On the first connection to a new host, the host key needs to be added — e.g. `ssh-keyscan -p 22 host.example.com >> ~/Library/Containers/com.sequel-ace.sequel-ace/Data/.keys/ssh_known_hosts_strict`.
+
+---
+
 ### lameco:db_upload
 
 Uploads a local database dump to a remote host and imports it.
@@ -105,7 +130,7 @@ Syncs the database and/or uploaded files between two endpoints via SSH streaming
 - The endpoint list is grouped for clarity: `local` first, then staging host(s), then production and any other host(s) — each group keeping its `deploy.php` declaration order.
 - For safety the prompts default to the typical production → staging flow: the source defaults to the first non-staging (production-like) host and the destination defaults to the first staging host (detected via the `stage` label or `staging` in the host alias/hostname), even when multiple production hosts are configured.
 - Requires confirmation before overwriting data on the destination.
-- **Database sync**: streams the database directly between endpoints by piping `mysqldump | gzip` from the source to `gunzip | mysql` on the destination — no temporary files are written to disk. Remote endpoints are reached over SSH; the `local` endpoint reads credentials from the project-root `.env` and runs directly.
+- **Database sync**: streams the database directly between endpoints by piping `mariadb-dump | gzip` from the source to `gunzip | mariadb` on the destination — no temporary files are written to disk. Remote endpoints are reached over SSH; the `local` endpoint reads credentials from the project-root `.env` and runs directly.
 - **File sync**: streams directories between endpoints by piping `tar` — no temporary files are written to disk. Local files live at the project root; remote files live under `{{deploy_path}}/shared`.
 - Restarts PHP-FPM and Supervisor on the destination after the sync completes — skipped when the destination is `local`.
 - Typical usage: sync production data to staging, or pull production data down to your local machine.
@@ -230,6 +255,40 @@ set('lameco_php_config', 'php-fpm-customuser.service');
 - `lameco:build_assets` expects nvm in `$NVM_DIR` (or `~/.nvm`) and uses `bash -lc` to load it.
 - Supervisor and PHP-FPM restarts are configurable and can be disabled per project.
 - For staging hosts, configure a deployment branch (or pass `--branch`) if `release/*` branches exist to avoid ambiguous deployments.
+
+## Upgrading from 1.x
+
+Version 2.0 switches all database CLI invocations from `mysql` / `mysqldump` to `mariadb` / `mariadb-dump`. This is a breaking change: the affected tasks (`lameco:db_download`, `lameco:db_upload`, `lameco:sync`, `lameco:deactivate`) will fail with `command not found` on any host where only the legacy MySQL client is installed.
+
+To upgrade:
+
+1. Install the MariaDB client package locally and on every remote host that runs the database tasks.
+   - On Debian/Ubuntu: `apt install mariadb-client`.
+   - On macOS via Homebrew: `brew install mariadb`.
+2. If you cannot install the MariaDB client on a given host, create symlinks as a stopgap:
+   ```bash
+   ln -s "$(command -v mysql)"     /usr/local/bin/mariadb
+   ln -s "$(command -v mysqldump)" /usr/local/bin/mariadb-dump
+   ```
+3. The `MYSQL_PWD` environment variable is still used for password handling — the MariaDB client honors it for backward compatibility, so no credential changes are required.
+4. The `lameco:db_open` task still builds a `mysql://` URL for Sequel Ace; that is a Sequel Ace URL scheme and is unaffected.
+
+## Contributing
+
+### Commit messages
+
+This repository uses [Conventional Commits](https://www.conventionalcommits.org/). Release tags, GitHub Releases and `CHANGELOG.md` are produced automatically by [release-please](https://github.com/googleapis/release-please) based on commit prefixes:
+
+| Prefix | Effect on next release |
+|---|---|
+| `feat:` | Minor bump (e.g. `1.4.0` → `1.5.0`), listed under **Features** in the changelog |
+| `fix:` | Patch bump (e.g. `1.4.0` → `1.4.1`), listed under **Bug Fixes** |
+| `feat!:` or any commit with a `BREAKING CHANGE:` footer | Major bump (e.g. `1.4.0` → `2.0.0`) |
+| `docs:`, `chore:`, `refactor:`, `style:`, `test:`, `ci:`, `build:` | No version bump, no changelog entry |
+
+Example: `feat: add lameco:db_open task to open remote DB in Sequel Ace via SSH tunnel`
+
+When release-please detects a releasable commit on `main`, it opens (or updates) a **"chore: release X.Y.Z"** PR. Merging that PR creates the git tag and a GitHub Release; Packagist auto-discovers the tag.
 
 ## License
 

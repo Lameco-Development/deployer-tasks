@@ -101,6 +101,72 @@ function extractDbCredentials(array $env): array
 }
 
 /**
+ * Extract database host and port from an environment array.
+ * Supports DATABASE_URL (Symfony), CRAFT_DB_* (Craft CMS), and Laravel style.
+ *
+ * @param array $env Associative array of environment variables.
+ * @return array Array with [host, port] or [null, null] if not found.
+ */
+function extractDbHostPort(array $env): array
+{
+    if (! empty($env['DATABASE_URL'])) {
+        $url = (string) $env['DATABASE_URL'];
+        $parts = parse_url($url);
+        if (is_array($parts) && (! isset($parts['scheme']) || in_array($parts['scheme'], ['mysql', 'mariadb'], true))) {
+            $host = isset($parts['host']) ? rawurldecode($parts['host']) : null;
+            $port = isset($parts['port']) ? (int) $parts['port'] : null;
+            return [$host, $port];
+        }
+    } elseif (! empty($env['CRAFT_DB_DATABASE'])) {
+        return [
+            $env['CRAFT_DB_SERVER'] ?? null,
+            isset($env['CRAFT_DB_PORT']) ? (int) $env['CRAFT_DB_PORT'] : null,
+        ];
+    } elseif (! empty($env['DB_DATABASE'])) {
+        return [
+            $env['DB_HOST'] ?? null,
+            isset($env['DB_PORT']) ? (int) $env['DB_PORT'] : null,
+        ];
+    }
+    return [null, null];
+}
+
+/**
+ * Resolve the SSH identity file to use for a Deployer host.
+ * Falls back to the first existing of ~/.ssh/id_ed25519, ~/.ssh/id_rsa.
+ *
+ * @param \Deployer\Host\Host $host The Deployer host.
+ * @return string|null Absolute path to the identity file, or null if none found.
+ */
+function resolveSshIdentityFile(\Deployer\Host\Host $host): ?string
+{
+    $home = $_SERVER['HOME'] ?? getenv('HOME') ?: null;
+
+    $configured = $host->getIdentityFile();
+    if ($configured !== null && $configured !== '') {
+        if ($home !== null && str_starts_with($configured, '~/')) {
+            $configured = $home . substr($configured, 1);
+        }
+        if (file_exists($configured)) {
+            return $configured;
+        }
+    }
+
+    if ($home === null) {
+        return null;
+    }
+
+    foreach (['id_ed25519', 'id_rsa'] as $name) {
+        $path = $home . '/.ssh/' . $name;
+        if (file_exists($path)) {
+            return $path;
+        }
+    }
+
+    return null;
+}
+
+/**
  * Determine if the given Node.js version supports Corepack.
  *
  * @param string $versionString Node.js version string (e.g. "v16.13.0").
@@ -147,7 +213,13 @@ function composerHasPackage(string $package): bool
  */
 function buildSshCommand(\Deployer\Host\Host $host): string
 {
-    $options = $host->connectionOptionsString();
+    // Deployer 8 removed Host::connectionOptionsString()/connectionOptionsArray();
+    // only connectionOptions(): array remains. Reproduce v7's exact formatting
+    // (implode of escapeshellarg'd flags) from whichever accessor the engine exposes.
+    $optionsArray = method_exists($host, 'connectionOptions')
+        ? $host->connectionOptions()        // Deployer 8
+        : $host->connectionOptionsArray();  // Deployer 7
+    $options = implode(' ', array_map(escapeshellarg(...), $optionsArray));
     $connection = escapeshellarg($host->connectionString());
 
     return 'ssh' . ($options !== '' ? ' ' . $options : '') . ' ' . $connection;
@@ -242,6 +314,29 @@ function hostIsStaging(\Deployer\Host\Host $host): bool
     $stage = (string) ($host->getLabels()['stage'] ?? '');
 
     return $stage === 'staging' || str_contains($hostAlias, 'staging') || str_contains($hostName, 'staging');
+}
+
+/**
+ * Run a command locally with no timeout, compatible with Deployer 7 and 8.
+ *
+ * Deployer 7's runLocally() accepts an options array as its 2nd positional
+ * argument (['timeout' => null]); Deployer 8 removed that form (the 2nd/3rd
+ * positionals are now ?string $cwd / ?int $timeout). Branch on the v8-only
+ * Host::connectionOptions() to pick the correct call shape; 0 disables the
+ * timeout identically to v7's null.
+ *
+ * @param string $command The command to run locally.
+ * @return string The command output.
+ */
+function runLocallyWithoutTimeout(string $command): string
+{
+    if (method_exists(\Deployer\Host\Host::class, 'connectionOptions')) {
+        return runLocally($command, null, 0);
+    }
+
+    return runLocally($command, [
+        'timeout' => null,
+    ]);
 }
 
 /**
