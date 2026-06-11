@@ -102,6 +102,7 @@ Syncs the database and/or uploaded files between two endpoints via SSH streaming
 
 - Prompts to select a sync scope: **Database and files**, **Database only**, or **Files only**.
 - Interactively prompts for a source (data is copied **from**) and a destination (data is written **to**). Each can be any configured host or `local` (your own machine), in either direction — so you can pull a remote down to local, push local up to a remote, or sync one remote to another.
+- For safety the prompts default to the typical production → staging flow: the source defaults to the first non-staging (production-like) host and the destination defaults to the first staging host (detected via the `stage` label or `staging` in the host alias/hostname), even when multiple production hosts are configured.
 - Requires confirmation before overwriting data on the destination.
 - **Database sync**: streams the database directly between endpoints by piping `mysqldump | gzip` from the source to `gunzip | mysql` on the destination — no temporary files are written to disk. Remote endpoints are reached over SSH; the `local` endpoint reads credentials from the project-root `.env` and runs directly.
 - **File sync**: streams directories between endpoints by piping `tar` — no temporary files are written to disk. Local files live at the project root; remote files live under `{{deploy_path}}/shared`.

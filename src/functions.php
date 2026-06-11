@@ -230,6 +230,21 @@ function getEndpointSharedPath(?\Deployer\Host\Host $host): string
 }
 
 /**
+ * Determine if a given host is a staging environment.
+ *
+ * @param \Deployer\Host\Host $host The host to inspect.
+ * @return bool True if the host is a staging environment, false otherwise.
+ */
+function hostIsStaging(\Deployer\Host\Host $host): bool
+{
+    $hostAlias = (string) ($host->getAlias() ?? '');
+    $hostName = (string) ($host->getHostname() ?? '');
+    $stage = (string) ($host->getLabels()['stage'] ?? '');
+
+    return $stage === 'staging' || str_contains($hostAlias, 'staging') || str_contains($hostName, 'staging');
+}
+
+/**
  * Determine if the current host is a staging environment.
  *
  * @return bool True if the current host is a staging environment, false otherwise.
@@ -241,12 +256,7 @@ function isStaging(): bool
         return false;
     }
 
-    // Check if this is a staging environment
-    $hostAlias = (string) ($selectedHost->getAlias() ?? '');
-    $hostName = (string) ($selectedHost->getHostname() ?? '');
-    $stage = (string) ($selectedHost->getLabels()['stage'] ?? '');
-
-    return $stage === 'staging' || str_contains($hostAlias, 'staging') || str_contains($hostName, 'staging');
+    return hostIsStaging($selectedHost);
 }
 
 /**

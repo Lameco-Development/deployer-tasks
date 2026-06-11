@@ -276,6 +276,27 @@ task('lameco:sync', function (): void {
     // The local machine is always available as an endpoint, alongside the hosts.
     $endpoints = ['local', ...$hostAliases];
 
+    // Default to the typical production -> staging flow: source is the first
+    // non-staging (production-like) host, destination is the first staging host.
+    // This keeps the destination on a staging environment by default for safety,
+    // even when multiple production hosts are configured.
+    $firstStagingIndex = null;
+    $firstProductionIndex = null;
+    foreach ($endpoints as $index => $endpoint) {
+        if ($endpoint === 'local') {
+            continue;
+        }
+
+        if (hostIsStaging($deployer->hosts->get($endpoint))) {
+            $firstStagingIndex ??= $index;
+        } else {
+            $firstProductionIndex ??= $index;
+        }
+    }
+
+    $defaultSource = $firstProductionIndex ?? 0;
+    $defaultDestination = $firstStagingIndex ?? ($defaultSource === 0 ? array_key_last($endpoints) : 0);
+
     $syncScope = (string) askChoice('Select what to sync:', [
         'Database and files',
         'Database only',
@@ -285,8 +306,8 @@ task('lameco:sync', function (): void {
     $syncDb = $syncScope !== 'Files only';
     $syncFiles = $syncScope !== 'Database only';
 
-    $source = (string) askChoice('Select source (data will be copied FROM here):', $endpoints, 0);
-    $destination = (string) askChoice('Select destination (data will be written TO here):', $endpoints, 1);
+    $source = (string) askChoice('Select source (data will be copied FROM here):', $endpoints, $defaultSource);
+    $destination = (string) askChoice('Select destination (data will be written TO here):', $endpoints, $defaultDestination);
 
     if ($source === $destination) {
         error('Source and destination must be different.');
