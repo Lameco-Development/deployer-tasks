@@ -123,15 +123,17 @@ Uploads directories from local to remote.
 
 ### lameco:sync
 
-Syncs the database and/or uploaded files from one remote host to another via SSH streaming.
+Syncs the database and/or uploaded files between two endpoints via SSH streaming.
 
 - Prompts to select a sync scope: **Database and files**, **Database only**, or **Files only**.
-- Interactively prompts for a source host (data is copied **from**) and a destination host (data is written **to**).
-- Requires confirmation before overwriting data on the destination host.
-- **Database sync**: streams the database directly between servers by piping `mysqldump | gzip` through SSH from source to `gunzip | mysql` on destination — no temporary files are written to disk.
-- **File sync**: streams directories between servers by piping `tar` through SSH — no temporary files are written to disk.
-- Restarts PHP-FPM and Supervisor on the destination host after the sync completes.
-- Typical usage: sync production data to staging.
+- Interactively prompts for a source (data is copied **from**) and a destination (data is written **to**). Each can be any configured host or `local` (your own machine), in either direction — so you can pull a remote down to local, push local up to a remote, or sync one remote to another.
+- The endpoint list is grouped for clarity: `local` first, then staging host(s), then production and any other host(s) — each group keeping its `deploy.php` declaration order.
+- For safety the prompts default to the typical production → staging flow: the source defaults to the first non-staging (production-like) host and the destination defaults to the first staging host (detected via the `stage` label or `staging` in the host alias/hostname), even when multiple production hosts are configured.
+- Requires confirmation before overwriting data on the destination.
+- **Database sync**: streams the database directly between endpoints by piping `mariadb-dump | gzip` from the source to `gunzip | mariadb` on the destination — no temporary files are written to disk. Remote endpoints are reached over SSH; the `local` endpoint reads credentials from the project-root `.env` and runs directly.
+- **File sync**: streams directories between endpoints by piping `tar` — no temporary files are written to disk. Local files live at the project root; remote files live under `{{deploy_path}}/shared`.
+- Restarts PHP-FPM and Supervisor on the destination after the sync completes — skipped when the destination is `local`.
+- Typical usage: sync production data to staging, or pull production data down to your local machine.
 
 **Example:**
 
@@ -139,7 +141,7 @@ Syncs the database and/or uploaded files from one remote host to another via SSH
 dep lameco:sync
 ```
 
-The task will prompt to select the sync scope, source host, and destination host from the configured list.
+The task will prompt to select the sync scope, source, and destination from `local` plus the configured hosts.
 
 ---
 

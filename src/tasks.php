@@ -330,10 +330,32 @@ task('lameco:sync', function (): void {
 
     $hostAliases = array_keys($deployer->hosts->all());
 
-    if (count($hostAliases) < 2) {
-        error('At least two hosts must be configured to use lameco:sync.');
+    if (count($hostAliases) < 1) {
+        error('At least one host must be configured to use lameco:sync.');
         return;
     }
+
+    // Group hosts by environment so the list always reads local, then staging
+    // host(s), then production and any other host(s) — each group keeping its
+    // deploy.php declaration order.
+    $stagingHosts = [];
+    $otherHosts = [];
+    foreach ($hostAliases as $alias) {
+        if (hostIsStaging($deployer->hosts->get($alias))) {
+            $stagingHosts[] = $alias;
+        } else {
+            $otherHosts[] = $alias;
+        }
+    }
+
+    // The local machine is always available as an endpoint, alongside the hosts.
+    $endpoints = ['local', ...$stagingHosts, ...$otherHosts];
+
+    // Default to the typical production -> staging flow for safety: source is the
+    // first non-staging (production-like) host, destination is the first staging
+    // host. Falls back to local when no host of that kind is configured.
+    $defaultSource = $otherHosts !== [] ? (int) array_search($otherHosts[0], $endpoints, true) : 0;
+    $defaultDestination = $stagingHosts !== [] ? (int) array_search($stagingHosts[0], $endpoints, true) : 0;
 
     $syncScope = (string) askChoice('Select what to sync:', [
         'Database and files',
@@ -344,16 +366,17 @@ task('lameco:sync', function (): void {
     $syncDb = $syncScope !== 'Files only';
     $syncFiles = $syncScope !== 'Database only';
 
-    $source = (string) askChoice('Select source host (data will be copied FROM this host):', $hostAliases, 0);
-    $destination = (string) askChoice('Select destination host (data will be written TO this host):', $hostAliases, 1);
+    $source = (string) askChoice('Select source (data will be copied FROM here):', $endpoints, $defaultSource);
+    $destination = (string) askChoice('Select destination (data will be written TO here):', $endpoints, $defaultDestination);
 
     if ($source === $destination) {
-        error('Source and destination must be different hosts.');
+        error('Source and destination must be different.');
         return;
     }
 
-    $sourceHost = $deployer->hosts->get($source);
-    $destHost = $deployer->hosts->get($destination);
+    // A null host represents the local endpoint.
+    $sourceHost = $source === 'local' ? null : $deployer->hosts->get($source);
+    $destHost = $destination === 'local' ? null : $deployer->hosts->get($destination);
 
     if ($syncDb && $syncFiles) {
         $scopeWarning = 'The database and uploaded files on the destination';
@@ -383,45 +406,22 @@ task('lameco:sync', function (): void {
         return;
     }
 
-    $sourceSsh = buildSshCommand($sourceHost);
-    $destSsh = buildSshCommand($destHost);
-
     // Stream database from source to destination via local pipe.
     if ($syncDb) {
         writeln('');
         writeln('→ Reading database credentials...');
 
-        $sourceDbUser = null;
-        $sourceDbPassword = null;
-        $sourceDbName = null;
-
-        on($sourceHost, function () use (&$sourceDbUser, &$sourceDbPassword, &$sourceDbName): void {
-            within('{{deploy_path}}/shared', function () use (&$sourceDbUser, &$sourceDbPassword, &$sourceDbName): void {
-                $envContent = run('cat .env');
-                $env = fetchEnv($envContent);
-                [$sourceDbUser, $sourceDbPassword, $sourceDbName] = extractDbCredentials($env);
-            });
-        });
+        [$sourceDbUser, $sourceDbPassword, $sourceDbName] = readEndpointDbCredentials($sourceHost);
 
         if (! isset($sourceDbUser, $sourceDbPassword, $sourceDbName)) {
-            error('Could not extract database credentials from source host.');
+            error('Could not extract database credentials from source (' . $source . ').');
             return;
         }
 
-        $destDbUser = null;
-        $destDbPassword = null;
-        $destDbName = null;
-
-        on($destHost, function () use (&$destDbUser, &$destDbPassword, &$destDbName): void {
-            within('{{deploy_path}}/shared', function () use (&$destDbUser, &$destDbPassword, &$destDbName): void {
-                $envContent = run('cat .env');
-                $env = fetchEnv($envContent);
-                [$destDbUser, $destDbPassword, $destDbName] = extractDbCredentials($env);
-            });
-        });
+        [$destDbUser, $destDbPassword, $destDbName] = readEndpointDbCredentials($destHost);
 
         if (! isset($destDbUser, $destDbPassword, $destDbName)) {
-            error('Could not extract database credentials from destination host.');
+            error('Could not extract database credentials from destination (' . $destination . ').');
             return;
         }
 
@@ -431,7 +431,7 @@ task('lameco:sync', function (): void {
         $prepCmd = 'MYSQL_PWD=' . escapeshellarg((string) $destDbPassword)
             . ' mariadb -u ' . escapeshellarg((string) $destDbUser)
             . ' -e ' . escapeshellarg($createSql);
-        runLocally($destSsh . ' ' . escapeshellarg($prepCmd));
+        runLocally(wrapEndpointCommand($destHost, $prepCmd));
 
         writeln('→ Streaming database from ' . $source . ' to ' . $destination . '...');
         $dumpCmd = 'MYSQL_PWD=' . escapeshellarg((string) $sourceDbPassword)
@@ -441,24 +441,28 @@ task('lameco:sync', function (): void {
             . ' mariadb -u ' . escapeshellarg((string) $destDbUser)
             . ' ' . escapeshellarg((string) $destDbName);
         runLocallyWithoutTimeout(
-            $sourceSsh . ' ' . escapeshellarg($dumpCmd) . ' | ' . $destSsh . ' ' . escapeshellarg($importCmd),
+            wrapEndpointCommand($sourceHost, $dumpCmd) . ' | ' . wrapEndpointCommand($destHost, $importCmd),
         );
     }
 
     // Stream files from source to destination via tar pipe.
     if ($syncFiles) {
-        $downloadDirs = [];
-        $sourceDeployPath = '';
-        $destDeployPath = '';
+        $resolveDownloadDirs = static fn (): array => array_map(
+            fn (string $dir): string => parse($dir),
+            get('lameco_download_dirs'),
+        );
 
-        on($sourceHost, function () use (&$downloadDirs, &$sourceDeployPath): void {
-            $downloadDirs = array_map(fn (string $dir): string => parse($dir), get('lameco_download_dirs'));
-            $sourceDeployPath = run('echo {{deploy_path}}');
-        });
+        if ($sourceHost instanceof \Deployer\Host\Host) {
+            $downloadDirs = [];
+            on($sourceHost, function () use (&$downloadDirs, $resolveDownloadDirs): void {
+                $downloadDirs = $resolveDownloadDirs();
+            });
+        } else {
+            $downloadDirs = $resolveDownloadDirs();
+        }
 
-        on($destHost, function () use (&$destDeployPath): void {
-            $destDeployPath = run('echo {{deploy_path}}');
-        });
+        $sourceSharedPath = getEndpointSharedPath($sourceHost);
+        $destSharedPath = getEndpointSharedPath($destHost);
 
         if (empty($downloadDirs)) {
             writeln('No directories configured for sync.');
@@ -467,29 +471,31 @@ task('lameco:sync', function (): void {
                 writeln('');
                 writeln('→ Streaming directory ' . $dir . ' from ' . $source . ' to ' . $destination . '...');
 
-                $mkdirCmd = 'mkdir -p ' . escapeshellarg($destDeployPath . '/shared/' . $dir);
-                runLocally($destSsh . ' ' . escapeshellarg($mkdirCmd));
+                $mkdirCmd = 'mkdir -p ' . escapeshellarg($destSharedPath . '/' . $dir);
+                runLocally(wrapEndpointCommand($destHost, $mkdirCmd));
 
-                $tarSource = 'tar czf - -C ' . escapeshellarg($sourceDeployPath . '/shared') . ' ' . escapeshellarg($dir);
-                $tarDest = 'tar xzf - -C ' . escapeshellarg($destDeployPath . '/shared');
+                $tarSource = 'tar czf - -C ' . escapeshellarg($sourceSharedPath) . ' ' . escapeshellarg($dir);
+                $tarDest = 'tar xzf - -C ' . escapeshellarg($destSharedPath);
                 runLocallyWithoutTimeout(
-                    $sourceSsh . ' ' . escapeshellarg($tarSource) . ' | ' . $destSsh . ' ' . escapeshellarg($tarDest),
+                    wrapEndpointCommand($sourceHost, $tarSource) . ' | ' . wrapEndpointCommand($destHost, $tarDest),
                 );
             }
         }
     }
 
-    // Restart services on destination.
-    writeln('');
-    writeln('→ Restarting PHP on ' . $destination . '...');
-    on($destHost, function (): void {
-        invoke('lameco:restart_php');
-    });
+    // Restart services on the destination (remote destinations only).
+    if ($destHost instanceof \Deployer\Host\Host) {
+        writeln('');
+        writeln('→ Restarting PHP on ' . $destination . '...');
+        on($destHost, function (): void {
+            invoke('lameco:restart_php');
+        });
 
-    writeln('→ Restarting Supervisor on ' . $destination . '...');
-    on($destHost, function (): void {
-        invoke('lameco:restart_supervisor');
-    });
+        writeln('→ Restarting Supervisor on ' . $destination . '...');
+        on($destHost, function (): void {
+            invoke('lameco:restart_supervisor');
+        });
+    }
 
     writeln('');
     writeln('✔ Sync from ' . $source . ' to ' . $destination . ' completed.');

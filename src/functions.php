@@ -226,6 +226,97 @@ function buildSshCommand(\Deployer\Host\Host $host): string
 }
 
 /**
+ * Wrap a shell command for execution on a sync endpoint.
+ *
+ * Every wrapped command is executed locally via runLocally(). A remote endpoint
+ * is reached over SSH; the local endpoint (null host) runs the command directly.
+ *
+ * @param \Deployer\Host\Host|null $host The endpoint host, or null for local.
+ * @param string $command The shell command to wrap.
+ * @return string The command to pass to runLocally().
+ */
+function wrapEndpointCommand(?\Deployer\Host\Host $host, string $command): string
+{
+    if (! $host instanceof \Deployer\Host\Host) {
+        return $command;
+    }
+
+    return buildSshCommand($host) . ' ' . escapeshellarg($command);
+}
+
+/**
+ * Read database credentials for a sync endpoint.
+ *
+ * Remote endpoints are read from {{deploy_path}}/shared/.env over SSH; the local
+ * endpoint (null host) is read from the project-root .env file.
+ *
+ * @param \Deployer\Host\Host|null $host The endpoint host, or null for local.
+ * @return array{0: string|null, 1: string|null, 2: string|null} [user, password, name].
+ */
+function readEndpointDbCredentials(?\Deployer\Host\Host $host): array
+{
+    if (! $host instanceof \Deployer\Host\Host) {
+        if (! file_exists('.env')) {
+            return [null, null, null];
+        }
+
+        $env = fetchEnv((string) file_get_contents('.env'));
+
+        return extractDbCredentials($env);
+    }
+
+    $credentials = [null, null, null];
+
+    on($host, function () use (&$credentials): void {
+        within('{{deploy_path}}/shared', function () use (&$credentials): void {
+            $env = fetchEnv(run('cat .env'));
+            $credentials = extractDbCredentials($env);
+        });
+    });
+
+    return $credentials;
+}
+
+/**
+ * Resolve the shared base path for a sync endpoint.
+ *
+ * This is the directory that holds the synced subdirectories: {{deploy_path}}/shared
+ * for a remote endpoint, or the local project root for the local endpoint.
+ *
+ * @param \Deployer\Host\Host|null $host The endpoint host, or null for local.
+ * @return string The absolute shared base path.
+ */
+function getEndpointSharedPath(?\Deployer\Host\Host $host): string
+{
+    if (! $host instanceof \Deployer\Host\Host) {
+        return (string) getcwd();
+    }
+
+    $sharedPath = '';
+
+    on($host, function () use (&$sharedPath): void {
+        $sharedPath = run('echo {{deploy_path}}/shared');
+    });
+
+    return $sharedPath;
+}
+
+/**
+ * Determine if a given host is a staging environment.
+ *
+ * @param \Deployer\Host\Host $host The host to inspect.
+ * @return bool True if the host is a staging environment, false otherwise.
+ */
+function hostIsStaging(\Deployer\Host\Host $host): bool
+{
+    $hostAlias = (string) ($host->getAlias() ?? '');
+    $hostName = (string) ($host->getHostname() ?? '');
+    $stage = (string) ($host->getLabels()['stage'] ?? '');
+
+    return $stage === 'staging' || str_contains($hostAlias, 'staging') || str_contains($hostName, 'staging');
+}
+
+/**
  * Run a command locally with no timeout, compatible with Deployer 7 and 8.
  *
  * Deployer 7's runLocally() accepts an options array as its 2nd positional
@@ -260,12 +351,7 @@ function isStaging(): bool
         return false;
     }
 
-    // Check if this is a staging environment
-    $hostAlias = (string) ($selectedHost->getAlias() ?? '');
-    $hostName = (string) ($selectedHost->getHostname() ?? '');
-    $stage = (string) ($selectedHost->getLabels()['stage'] ?? '');
-
-    return $stage === 'staging' || str_contains($hostAlias, 'staging') || str_contains($hostName, 'staging');
+    return hostIsStaging($selectedHost);
 }
 
 /**
