@@ -9,6 +9,12 @@ require_once __DIR__ . '/functions.php';
 
 require 'contrib/crontab.php';
 
+// Ensure the lock file directory used by flock-wrapped cron jobs exists.
+desc('Ensure cron lock directory exists');
+task('lameco:ensure_cron_lock_dir', function (): void {
+    run('mkdir -p {{deploy_path}}/tmp');
+});
+
 // Verify local branch matches deployment branch.
 desc('Verify local branch matches deployment branch');
 task('lameco:verify_deploy_branch', function (): void {
@@ -782,6 +788,7 @@ after('lameco:build_assets', 'lameco:upload_assets');
 after('deploy:cleanup', 'lameco:restart_php');
 after('deploy:cleanup', 'lameco:restart_supervisor');
 
+before('crontab:sync', 'lameco:ensure_cron_lock_dir');
 after('deploy:success', 'crontab:sync');
 after('deploy:success', 'lameco:update_htpasswd');
 
