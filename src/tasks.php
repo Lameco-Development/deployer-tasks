@@ -73,6 +73,22 @@ task('lameco:verify_deploy_branch', function (): void {
         error($message);
         throw new GracefulShutdownException($message);
     }
+
+    // With local_archive the deploy ships this machine's branch and the asset build uses this
+    // working tree, so both must match origin. In CI the workflow checks out the exact commit.
+    if (! runsInCi()) {
+        runLocally('git fetch --quiet origin ' . escapeshellarg($hostBranch));
+        $problem = localCheckoutProblem(
+            $hostBranch,
+            trim(runLocally('git rev-parse HEAD')),
+            trim(runLocally('git rev-parse --verify --quiet ' . escapeshellarg('refs/remotes/origin/' . $hostBranch) . ' || true')),
+            runLocally('git status --porcelain'),
+        );
+        if ($problem !== null) {
+            error($problem);
+            throw new GracefulShutdownException($problem);
+        }
+    }
 });
 
 // Download remote database and import locally.

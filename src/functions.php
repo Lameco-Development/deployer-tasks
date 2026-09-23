@@ -400,3 +400,47 @@ function getCronMinute(): int
     // Convert slot to minute (multiply by 5)
     return $slot * 5;
 }
+
+/**
+ * Decide whether a local checkout may be deployed.
+ *
+ * With `update_code_strategy = local_archive` Deployer uploads `git archive <branch>` from the
+ * machine that runs `dep`, and `lameco:build_assets` always builds from the local working tree.
+ * A local branch that is behind or ahead of origin would therefore ship the wrong code, and
+ * uncommitted changes would end up in the asset build.
+ *
+ * @param string $branch          The branch being deployed.
+ * @param string $localSha        `git rev-parse HEAD`.
+ * @param string $remoteSha       `git rev-parse origin/<branch>` after a fetch; empty when origin has no such branch.
+ * @param string $statusPorcelain `git status --porcelain` output.
+ * @return string|null A message explaining why the deploy must stop, or null when it may proceed.
+ */
+function localCheckoutProblem(string $branch, string $localSha, string $remoteSha, string $statusPorcelain): ?string
+{
+    if ($remoteSha === '') {
+        return sprintf('Branch "%s" does not exist on origin. Push it before deploying.', $branch);
+    }
+
+    if ($localSha !== $remoteSha) {
+        return sprintf(
+            'Local %1$s (%2$s) differs from origin/%1$s (%3$s). Pull or push first, so the deploy ships what is on origin.',
+            $branch,
+            substr($localSha, 0, 7),
+            substr($remoteSha, 0, 7),
+        );
+    }
+
+    if (trim($statusPorcelain) !== '') {
+        return 'The working tree has uncommitted changes. Commit or stash them first (git stash -u): lameco:build_assets builds from the local files.';
+    }
+
+    return null;
+}
+
+/**
+ * Whether Deployer runs inside GitHub Actions, where the workflow checks out the exact commit itself.
+ */
+function runsInCi(): bool
+{
+    return getenv('GITHUB_ACTIONS') === 'true';
+}

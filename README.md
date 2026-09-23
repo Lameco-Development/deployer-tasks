@@ -39,6 +39,11 @@ Ensures the local branch matches the deployment branch.
 - Compares the current local git branch with the branch configured on the host (or `--branch` when provided).
 - Stops the deployment if the branches do not match, preventing asset builds from mismatching the deployed code.
 - If deploying to a `staging*` host without a branch configured, and `origin` has `release/*` branches, deployment is halted until a release branch is selected.
+- Buiten CI (`GITHUB_ACTIONS` is niet `true`) moet de lokale branch na een `git fetch` gelijk zijn aan
+  `origin/<branch>`, en mag de werkmap geen ongecommitte of untracked wijzigingen hebben (`git stash -u` helpt).
+  Met `update_code_strategy = local_archive` gaat de lokale branch live en bouwt `lameco:build_assets` uit de
+  lokale werkmap: zo gaat er nooit een verouderde of onafgemaakte versie mee. In CI zorgt de workflow zelf
+  voor de juiste commit.
 
 ---
 
