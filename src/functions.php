@@ -444,3 +444,25 @@ function runsInCi(): bool
 {
     return getenv('GITHUB_ACTIONS') === 'true';
 }
+
+/**
+ * Decide whether the deploy target may differ from the host branch.
+ *
+ * Deployer's --branch, --tag and --revision options change what `deploy:update_code` archives (the
+ * `target`), but not the host branch that `lameco:verify_deploy_branch` compares with origin. Outside CI
+ * a deploy must therefore ship exactly the host branch; `-o branch=<name>` sets both at once.
+ *
+ * @return string|null A message explaining why the deploy must stop, or null when it may proceed.
+ */
+function targetProblem(string $target, string $hostBranch): ?string
+{
+    if ($target === $hostBranch) {
+        return null;
+    }
+
+    return sprintf(
+        'This deploy would ship "%1$s" instead of the host branch "%2$s" (--branch, --tag or --revision). Use -o branch=%1$s to deploy another branch: it is then checked against origin like the host branch.',
+        $target,
+        $hostBranch,
+    );
+}

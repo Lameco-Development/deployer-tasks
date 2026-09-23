@@ -8,6 +8,7 @@ use PHPUnit\Framework\TestCase;
 
 use function Deployer\localCheckoutProblem;
 use function Deployer\runsInCi;
+use function Deployer\targetProblem;
 
 final class LocalCheckoutProblemTest extends TestCase
 {
@@ -56,5 +57,19 @@ final class LocalCheckoutProblemTest extends TestCase
         if ($previous !== false) {
             putenv('GITHUB_ACTIONS=' . $previous);
         }
+    }
+
+    public function testTargetEqualToTheHostBranchMayDeploy(): void
+    {
+        self::assertNull(targetProblem('main', 'main'));
+    }
+
+    public function testAnotherTargetThanTheHostBranchStopsTheDeploy(): void
+    {
+        $problem = targetProblem('hotfix/x', 'main');
+
+        self::assertNotNull($problem);
+        self::assertStringContainsString('would ship "hotfix/x" instead of the host branch "main"', $problem);
+        self::assertStringContainsString('-o branch=hotfix/x', $problem);
     }
 }

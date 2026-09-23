@@ -36,7 +36,7 @@ Loads project configuration for use in custom tasks.
 
 Ensures the local branch matches the deployment branch.
 
-- Compares the current local git branch with the branch configured on the host (or `--branch` when provided).
+- Compares the current local git branch with the branch configured on the host (or `-o branch=<name>` when provided).
 - Stops the deployment if the branches do not match, preventing asset builds from mismatching the deployed code.
 - If deploying to a `staging*` host without a branch configured, and `origin` has `release/*` branches, deployment is halted until a release branch is selected.
 - Buiten CI (`GITHUB_ACTIONS` is niet `true`) moet de lokale branch na een `git fetch` gelijk zijn aan
@@ -44,6 +44,10 @@ Ensures the local branch matches the deployment branch.
   Met `update_code_strategy = local_archive` gaat de lokale branch live en bouwt `lameco:build_assets` uit de
   lokale werkmap: zo gaat er nooit een verouderde of onafgemaakte versie mee. In CI zorgt de workflow zelf
   voor de juiste commit.
+- Buiten CI stoppen `--branch`, `--tag` en `--revision` de deploy: die veranderen wat er geüpload wordt, maar niet
+  wat er gecontroleerd wordt. Een andere branch deployen gaat met `-o branch=<naam>`. Een `git fetch` die mislukt
+  stopt de deploy netjes, zonder de `deploy:failed`-hooks (zoals `deploy:unlock`) te draaien. Bij meerdere hosts
+  loopt de controle host voor host.
 
 ---
 
@@ -259,7 +263,7 @@ set('lameco_php_config', 'php-fpm-customuser.service');
 - Asset build and upload tasks expect a working Node.js/yarn setup and `.nvmrc` file.
 - `lameco:build_assets` expects nvm in `$NVM_DIR` (or `~/.nvm`) and uses `bash -lc` to load it.
 - Supervisor and PHP-FPM restarts are configurable and can be disabled per project.
-- For staging hosts, configure a deployment branch (or pass `--branch`) if `release/*` branches exist to avoid ambiguous deployments.
+- For staging hosts, configure a deployment branch (or pass `-o branch=<name>`) if `release/*` branches exist to avoid ambiguous deployments.
 
 ## Upgrading from 1.x
 
