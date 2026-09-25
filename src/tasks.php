@@ -3,6 +3,7 @@
 namespace Deployer;
 
 use Deployer\Exception\GracefulShutdownException;
+use Deployer\Exception\RunException;
 
 require_once __DIR__ . '/config.php';
 require_once __DIR__ . '/functions.php';
@@ -73,7 +74,33 @@ task('lameco:verify_deploy_branch', function (): void {
         error($message);
         throw new GracefulShutdownException($message);
     }
-});
+
+    // With local_archive the deploy ships this machine's branch and the asset build uses this
+    // working tree, so both must match origin. In CI the workflow checks out the exact commit.
+    if (! runsInCi()) {
+        $problem = targetProblem((string) get('target'), $hostBranch);
+        if ($problem === null) {
+            // A failed fetch must stop gracefully: an ordinary failure would run the project's
+            // deploy:failed hooks, such as deploy:unlock on the servers.
+            try {
+                runLocally('git fetch --quiet origin ' . escapeshellarg($hostBranch));
+            } catch (RunException $exception) {
+                $problem = 'Could not fetch "' . $hostBranch . '" from origin, so it is unknown whether this checkout matches it: ' .
+                    trim($exception->getErrorOutput());
+            }
+        }
+        $problem ??= localCheckoutProblem(
+            $hostBranch,
+            trim(runLocally('git rev-parse HEAD')),
+            trim(runLocally('git rev-parse --verify --quiet ' . escapeshellarg('refs/remotes/origin/' . $hostBranch) . ' || true')),
+            runLocally('git status --porcelain'),
+        );
+        if ($problem !== null) {
+            error($problem);
+            throw new GracefulShutdownException($problem);
+        }
+    }
+})->limit(1); // one host at a time: parallel fetches into one checkout collide ("cannot lock ref")
 
 // Download remote database and import locally.
 desc('Download remote database and import locally');

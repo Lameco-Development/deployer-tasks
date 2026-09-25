@@ -1,5 +1,12 @@
 # Changelog
 
+## [2.3.0](https://github.com/Lameco-Development/deployer-tasks/compare/2.2.0...2.3.0) (2026-09-11)
+
+
+### Features
+
+* implement flock for cron jobs and ensure lock directory exists ([f7ba4f1](https://github.com/Lameco-Development/deployer-tasks/commit/f7ba4f189998043f6c163839ce51e41d3f97df2f))
+
 ## [2.2.0](https://github.com/Lameco-Development/deployer-tasks/compare/2.1.0...2.2.0) (2026-06-11)
 
 
