@@ -548,11 +548,21 @@ task('lameco:build_assets', function (): void {
         runLocally($runWithNvm('corepack enable'));
     }
 
+    $packageManager = resolvePackageManager();
+    writeln('Using package manager: ' . $packageManager);
+
     writeln('Installing dependencies...');
-    runLocally($runWithNvm('yarn install'));
+    runLocally($runWithNvm($packageManager . ' install'));
+
+    $buildFlags = trim((string) get('lameco_assets_build_flags'));
+    // npm swallows script arguments unless they follow `--`; yarn and pnpm pass them
+    // through as-is and would treat the separator as an argument of its own.
+    if ($buildFlags !== '' && $packageManager === 'npm') {
+        $buildFlags = '-- ' . $buildFlags;
+    }
 
     writeln('Building assets...');
-    runLocally($runWithNvm('yarn build ' . get('lameco_assets_build_flags')));
+    runLocally($runWithNvm(trim($packageManager . ' run build ' . $buildFlags)));
 })->once();
 
 // Upload built assets to remote.

@@ -400,3 +400,34 @@ function getCronMinute(): int
     // Convert slot to minute (multiply by 5)
     return $slot * 5;
 }
+
+/**
+ * Resolves the package manager a project uses from its package.json
+ * `packageManager` pin, which corepack already reads to pick the exact version.
+ *
+ * Defaults to yarn so projects predating the pin keep deploying unchanged. An
+ * unrecognised pin throws rather than falling back, because falling back to yarn
+ * would install from a lockfile the project no longer maintains.
+ */
+function resolvePackageManager(): string
+{
+    $default = 'yarn';
+
+    if (! file_exists('package.json')) {
+        return $default;
+    }
+
+    $manifest = json_decode((string) file_get_contents('package.json'), true);
+    if (! is_array($manifest) || ! isset($manifest['packageManager'])) {
+        return $default;
+    }
+
+    $name = explode('@', (string) $manifest['packageManager'])[0];
+    if (! in_array($name, ['yarn', 'pnpm', 'npm'], true)) {
+        throw new \RuntimeException(
+            'Unsupported packageManager pin "' . $name . '" in package.json — expected yarn, pnpm or npm.'
+        );
+    }
+
+    return $name;
+}
