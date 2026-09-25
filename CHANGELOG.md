@@ -1,5 +1,13 @@
 # Changelog
 
+## [2.4.0](https://github.com/Lameco-Development/deployer-tasks/compare/2.3.0...2.4.0) (2026-09-25)
+
+
+### Features
+
+* resolve build_assets' package manager from the packageManager pin ([4f85cec](https://github.com/Lameco-Development/deployer-tasks/commit/4f85ceca57bf9a9c15241505767a83cd53df712f))
+* stop handmatige deploys vanaf een verouderde of vuile branch ([#72](https://github.com/Lameco-Development/deployer-tasks/issues/72)) ([a9c8211](https://github.com/Lameco-Development/deployer-tasks/commit/a9c821196d8cdaa49221026d836b769cc4859bac))
+
 ## [2.3.0](https://github.com/Lameco-Development/deployer-tasks/compare/2.2.0...2.3.0) (2026-09-11)
 
 
