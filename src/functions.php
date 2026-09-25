@@ -101,6 +101,72 @@ function extractDbCredentials(array $env): array
 }
 
 /**
+ * Extract database host and port from an environment array.
+ * Supports DATABASE_URL (Symfony), CRAFT_DB_* (Craft CMS), and Laravel style.
+ *
+ * @param array $env Associative array of environment variables.
+ * @return array Array with [host, port] or [null, null] if not found.
+ */
+function extractDbHostPort(array $env): array
+{
+    if (! empty($env['DATABASE_URL'])) {
+        $url = (string) $env['DATABASE_URL'];
+        $parts = parse_url($url);
+        if (is_array($parts) && (! isset($parts['scheme']) || in_array($parts['scheme'], ['mysql', 'mariadb'], true))) {
+            $host = isset($parts['host']) ? rawurldecode($parts['host']) : null;
+            $port = isset($parts['port']) ? (int) $parts['port'] : null;
+            return [$host, $port];
+        }
+    } elseif (! empty($env['CRAFT_DB_DATABASE'])) {
+        return [
+            $env['CRAFT_DB_SERVER'] ?? null,
+            isset($env['CRAFT_DB_PORT']) ? (int) $env['CRAFT_DB_PORT'] : null,
+        ];
+    } elseif (! empty($env['DB_DATABASE'])) {
+        return [
+            $env['DB_HOST'] ?? null,
+            isset($env['DB_PORT']) ? (int) $env['DB_PORT'] : null,
+        ];
+    }
+    return [null, null];
+}
+
+/**
+ * Resolve the SSH identity file to use for a Deployer host.
+ * Falls back to the first existing of ~/.ssh/id_ed25519, ~/.ssh/id_rsa.
+ *
+ * @param \Deployer\Host\Host $host The Deployer host.
+ * @return string|null Absolute path to the identity file, or null if none found.
+ */
+function resolveSshIdentityFile(\Deployer\Host\Host $host): ?string
+{
+    $home = $_SERVER['HOME'] ?? getenv('HOME') ?: null;
+
+    $configured = $host->getIdentityFile();
+    if ($configured !== null && $configured !== '') {
+        if ($home !== null && str_starts_with($configured, '~/')) {
+            $configured = $home . substr($configured, 1);
+        }
+        if (file_exists($configured)) {
+            return $configured;
+        }
+    }
+
+    if ($home === null) {
+        return null;
+    }
+
+    foreach (['id_ed25519', 'id_rsa'] as $name) {
+        $path = $home . '/.ssh/' . $name;
+        if (file_exists($path)) {
+            return $path;
+        }
+    }
+
+    return null;
+}
+
+/**
  * Determine if the given Node.js version supports Corepack.
  *
  * @param string $versionString Node.js version string (e.g. "v16.13.0").
@@ -140,6 +206,140 @@ function composerHasPackage(string $package): bool
 }
 
 /**
+ * Build an SSH command string from a Deployer Host object.
+ *
+ * @param \Deployer\Host\Host $host The Deployer host to build the SSH command for.
+ * @return string The SSH command prefix (e.g. "ssh -p 22 -i key user@host").
+ */
+function buildSshCommand(\Deployer\Host\Host $host): string
+{
+    // Deployer 8 removed Host::connectionOptionsString()/connectionOptionsArray();
+    // only connectionOptions(): array remains. Reproduce v7's exact formatting
+    // (implode of escapeshellarg'd flags) from whichever accessor the engine exposes.
+    $optionsArray = method_exists($host, 'connectionOptions')
+        ? $host->connectionOptions()        // Deployer 8
+        : $host->connectionOptionsArray();  // Deployer 7
+    $options = implode(' ', array_map(escapeshellarg(...), $optionsArray));
+    $connection = escapeshellarg($host->connectionString());
+
+    return 'ssh' . ($options !== '' ? ' ' . $options : '') . ' ' . $connection;
+}
+
+/**
+ * Wrap a shell command for execution on a sync endpoint.
+ *
+ * Every wrapped command is executed locally via runLocally(). A remote endpoint
+ * is reached over SSH; the local endpoint (null host) runs the command directly.
+ *
+ * @param \Deployer\Host\Host|null $host The endpoint host, or null for local.
+ * @param string $command The shell command to wrap.
+ * @return string The command to pass to runLocally().
+ */
+function wrapEndpointCommand(?\Deployer\Host\Host $host, string $command): string
+{
+    if (! $host instanceof \Deployer\Host\Host) {
+        return $command;
+    }
+
+    return buildSshCommand($host) . ' ' . escapeshellarg($command);
+}
+
+/**
+ * Read database credentials for a sync endpoint.
+ *
+ * Remote endpoints are read from {{deploy_path}}/shared/.env over SSH; the local
+ * endpoint (null host) is read from the project-root .env file.
+ *
+ * @param \Deployer\Host\Host|null $host The endpoint host, or null for local.
+ * @return array{0: string|null, 1: string|null, 2: string|null} [user, password, name].
+ */
+function readEndpointDbCredentials(?\Deployer\Host\Host $host): array
+{
+    if (! $host instanceof \Deployer\Host\Host) {
+        if (! file_exists('.env')) {
+            return [null, null, null];
+        }
+
+        $env = fetchEnv((string) file_get_contents('.env'));
+
+        return extractDbCredentials($env);
+    }
+
+    $credentials = [null, null, null];
+
+    on($host, function () use (&$credentials): void {
+        within('{{deploy_path}}/shared', function () use (&$credentials): void {
+            $env = fetchEnv(run('cat .env'));
+            $credentials = extractDbCredentials($env);
+        });
+    });
+
+    return $credentials;
+}
+
+/**
+ * Resolve the shared base path for a sync endpoint.
+ *
+ * This is the directory that holds the synced subdirectories: {{deploy_path}}/shared
+ * for a remote endpoint, or the local project root for the local endpoint.
+ *
+ * @param \Deployer\Host\Host|null $host The endpoint host, or null for local.
+ * @return string The absolute shared base path.
+ */
+function getEndpointSharedPath(?\Deployer\Host\Host $host): string
+{
+    if (! $host instanceof \Deployer\Host\Host) {
+        return (string) getcwd();
+    }
+
+    $sharedPath = '';
+
+    on($host, function () use (&$sharedPath): void {
+        $sharedPath = run('echo {{deploy_path}}/shared');
+    });
+
+    return $sharedPath;
+}
+
+/**
+ * Determine if a given host is a staging environment.
+ *
+ * @param \Deployer\Host\Host $host The host to inspect.
+ * @return bool True if the host is a staging environment, false otherwise.
+ */
+function hostIsStaging(\Deployer\Host\Host $host): bool
+{
+    $hostAlias = (string) ($host->getAlias() ?? '');
+    $hostName = (string) ($host->getHostname() ?? '');
+    $stage = (string) ($host->getLabels()['stage'] ?? '');
+
+    return $stage === 'staging' || str_contains($hostAlias, 'staging') || str_contains($hostName, 'staging');
+}
+
+/**
+ * Run a command locally with no timeout, compatible with Deployer 7 and 8.
+ *
+ * Deployer 7's runLocally() accepts an options array as its 2nd positional
+ * argument (['timeout' => null]); Deployer 8 removed that form (the 2nd/3rd
+ * positionals are now ?string $cwd / ?int $timeout). Branch on the v8-only
+ * Host::connectionOptions() to pick the correct call shape; 0 disables the
+ * timeout identically to v7's null.
+ *
+ * @param string $command The command to run locally.
+ * @return string The command output.
+ */
+function runLocallyWithoutTimeout(string $command): string
+{
+    if (method_exists(\Deployer\Host\Host::class, 'connectionOptions')) {
+        return runLocally($command, null, 0);
+    }
+
+    return runLocally($command, [
+        'timeout' => null,
+    ]);
+}
+
+/**
  * Determine if the current host is a staging environment.
  *
  * @return bool True if the current host is a staging environment, false otherwise.
@@ -151,12 +351,7 @@ function isStaging(): bool
         return false;
     }
 
-    // Check if this is a staging environment
-    $hostAlias = (string) ($selectedHost->getAlias() ?? '');
-    $hostName = (string) ($selectedHost->getHostname() ?? '');
-    $stage = (string) ($selectedHost->getLabels()['stage'] ?? '');
-
-    return $stage === 'staging' || str_contains($hostAlias, 'staging') || str_contains($hostName, 'staging');
+    return hostIsStaging($selectedHost);
 }
 
 /**
@@ -204,4 +399,101 @@ function getCronMinute(): int
 
     // Convert slot to minute (multiply by 5)
     return $slot * 5;
+}
+
+/**
+ * Resolves the package manager a project uses from its package.json
+ * `packageManager` pin, which corepack already reads to pick the exact version.
+ *
+ * Defaults to yarn so projects predating the pin keep deploying unchanged. An
+ * unrecognised pin throws rather than falling back, because falling back to yarn
+ * would install from a lockfile the project no longer maintains.
+ */
+function resolvePackageManager(): string
+{
+    $default = 'yarn';
+
+    if (! file_exists('package.json')) {
+        return $default;
+    }
+
+    $manifest = json_decode((string) file_get_contents('package.json'), true);
+    if (! is_array($manifest) || ! isset($manifest['packageManager'])) {
+        return $default;
+    }
+
+    $name = explode('@', (string) $manifest['packageManager'])[0];
+    if (! in_array($name, ['yarn', 'pnpm', 'npm'], true)) {
+        throw new \RuntimeException(
+            'Unsupported packageManager pin "' . $name . '" in package.json — expected yarn, pnpm or npm.'
+        );
+    }
+
+    return $name;
+}
+
+/**
+ * Decide whether a local checkout may be deployed.
+ *
+ * With `update_code_strategy = local_archive` Deployer uploads `git archive <branch>` from the
+ * machine that runs `dep`, and `lameco:build_assets` always builds from the local working tree.
+ * A local branch that is behind or ahead of origin would therefore ship the wrong code, and
+ * uncommitted changes would end up in the asset build.
+ *
+ * @param string $branch          The branch being deployed.
+ * @param string $localSha        `git rev-parse HEAD`.
+ * @param string $remoteSha       `git rev-parse origin/<branch>` after a fetch; empty when origin has no such branch.
+ * @param string $statusPorcelain `git status --porcelain` output.
+ * @return string|null A message explaining why the deploy must stop, or null when it may proceed.
+ */
+function localCheckoutProblem(string $branch, string $localSha, string $remoteSha, string $statusPorcelain): ?string
+{
+    if ($remoteSha === '') {
+        return sprintf('Branch "%s" does not exist on origin. Push it before deploying.', $branch);
+    }
+
+    if ($localSha !== $remoteSha) {
+        return sprintf(
+            'Local %1$s (%2$s) differs from origin/%1$s (%3$s). Pull or push first, so the deploy ships what is on origin.',
+            $branch,
+            substr($localSha, 0, 7),
+            substr($remoteSha, 0, 7),
+        );
+    }
+
+    if (trim($statusPorcelain) !== '') {
+        return 'The working tree has uncommitted changes. Commit or stash them first (git stash -u): lameco:build_assets builds from the local files.';
+    }
+
+    return null;
+}
+
+/**
+ * Whether Deployer runs inside GitHub Actions, where the workflow checks out the exact commit itself.
+ */
+function runsInCi(): bool
+{
+    return getenv('GITHUB_ACTIONS') === 'true';
+}
+
+/**
+ * Decide whether the deploy target may differ from the host branch.
+ *
+ * Deployer's --branch, --tag and --revision options change what `deploy:update_code` archives (the
+ * `target`), but not the host branch that `lameco:verify_deploy_branch` compares with origin. Outside CI
+ * a deploy must therefore ship exactly the host branch; `-o branch=<name>` sets both at once.
+ *
+ * @return string|null A message explaining why the deploy must stop, or null when it may proceed.
+ */
+function targetProblem(string $target, string $hostBranch): ?string
+{
+    if ($target === $hostBranch) {
+        return null;
+    }
+
+    return sprintf(
+        'This deploy would ship "%1$s" instead of the host branch "%2$s" (--branch, --tag or --revision). Use -o branch=%1$s to deploy another branch: it is then checked against origin like the host branch.',
+        $target,
+        $hostBranch,
+    );
 }

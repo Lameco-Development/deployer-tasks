@@ -6,6 +6,7 @@ A collection of common tasks for [Deployer](https://deployer.org/) to streamline
 
 - PHP 8.4 or higher
 - Deployer 7.0 or higher
+- MariaDB client tools (`mariadb` and `mariadb-dump`) on every host that runs the database tasks (`lameco:db_download`, `lameco:db_upload`, `lameco:sync`, `lameco:deactivate`) — both locally and on each remote host. The legacy `mysql` / `mysqldump` binaries are no longer invoked; see [Upgrading from 1.x](#upgrading-from-1x).
 
 ## Installation
 
@@ -35,9 +36,18 @@ Loads project configuration for use in custom tasks.
 
 Ensures the local branch matches the deployment branch.
 
-- Compares the current local git branch with the branch configured on the host (or `--branch` when provided).
+- Compares the current local git branch with the branch configured on the host (or `-o branch=<name>` when provided).
 - Stops the deployment if the branches do not match, preventing asset builds from mismatching the deployed code.
 - If deploying to a `staging*` host without a branch configured, and `origin` has `release/*` branches, deployment is halted until a release branch is selected.
+- Buiten CI (`GITHUB_ACTIONS` is niet `true`) moet de lokale branch na een `git fetch` gelijk zijn aan
+  `origin/<branch>`, en mag de werkmap geen ongecommitte of untracked wijzigingen hebben (`git stash -u` helpt).
+  Met `update_code_strategy = local_archive` gaat de lokale branch live en bouwt `lameco:build_assets` uit de
+  lokale werkmap: zo gaat er nooit een verouderde of onafgemaakte versie mee. In CI zorgt de workflow zelf
+  voor de juiste commit.
+- Buiten CI stoppen `--branch`, `--tag` en `--revision` de deploy: die veranderen wat er geüpload wordt, maar niet
+  wat er gecontroleerd wordt. Een andere branch deployen gaat met `-o branch=<naam>`. Een `git fetch` die mislukt
+  stopt de deploy netjes, zonder de `deploy:failed`-hooks (zoals `deploy:unlock`) te draaien. Bij meerdere hosts
+  loopt de controle host voor host.
 
 ---
 
@@ -63,11 +73,35 @@ Displays remote database credentials.
 
 ---
 
+### lameco:db_open
+
+Opens the remote database of the selected host in [Sequel Ace](https://github.com/Sequel-Ace/Sequel-Ace), tunneled over SSH with your local SSH key.
+
+- Reads the remote `.env` file and extracts DB user, password, name, host and port (supports Symfony `DATABASE_URL`, Craft `CRAFT_DB_*` and Laravel `DB_*`).
+- Reads SSH host, port and user from the Deployer host config.
+- Resolves the SSH key: uses the host's `identity_file` if set, otherwise falls back to the first existing of `~/.ssh/id_ed25519`, `~/.ssh/id_rsa`.
+- Builds a `mysql://` URL with Sequel Ace's `ssh_*` query parameters and launches it via `open`. Sequel Ace then establishes the tunnel itself.
+- macOS only. Errors out clearly on other platforms or when credentials/SSH key cannot be resolved.
+
+**Example:**
+
+```bash
+dep lameco:db_open staging
+dep lameco:db_open production
+```
+
+**Notes:**
+
+- Sequel Ace must have sandbox access to the SSH key file — grant it in **Settings → Files**.
+- Sequel Ace uses its own strict `ssh_known_hosts` file (under `~/Library/Containers/com.sequel-ace.sequel-ace/Data/.keys/`). On the first connection to a new host, the host key needs to be added — e.g. `ssh-keyscan -p 22 host.example.com >> ~/Library/Containers/com.sequel-ace.sequel-ace/Data/.keys/ssh_known_hosts_strict`.
+
+---
+
 ### lameco:db_upload
 
 Uploads a local database dump to a remote host and imports it.
 
-- Looks for the dump file set in `dump_file` (automatically set by `lameco:db_download` and `lameco:sync`).
+- Looks for the dump file set in `dump_file` (automatically set by `lameco:db_download`).
 - If `dump_file` is not set, auto-detects the most recently modified `current_*.sql.gz` in `lameco_dump_dir`.
 - Uploads the dump to `{{deploy_path}}/shared` on the remote server.
 - Reads the remote `.env` file to extract DB credentials.
@@ -98,16 +132,17 @@ Uploads directories from local to remote.
 
 ### lameco:sync
 
-Syncs the database and uploaded files from one remote host to another.
+Syncs the database and/or uploaded files between two endpoints via SSH streaming.
 
-- Interactively prompts for a source host (data is copied **from**) and a destination host (data is written **to**).
-- Requires confirmation before overwriting data on the destination host.
-- Downloads the source database as a gzipped dump (without importing locally), then uploads and imports it on the destination host via `lameco:db_upload`.
-- Downloads uploaded files from the source via `lameco:download`, then uploads them to the destination via `lameco:upload`.
-- Restarts PHP-FPM on the destination host via `lameco:restart_php` after the sync completes.
-- Restarts Supervisor on the destination host via `lameco:restart_supervisor` after the sync completes.
-- Typical usage: sync production data to staging.
-- Can also sync in the reverse direction if needed.
+- Prompts to select a sync scope: **Database and files**, **Database only**, or **Files only**.
+- Interactively prompts for a source (data is copied **from**) and a destination (data is written **to**). Each can be any configured host or `local` (your own machine), in either direction — so you can pull a remote down to local, push local up to a remote, or sync one remote to another.
+- The endpoint list is grouped for clarity: `local` first, then staging host(s), then production and any other host(s) — each group keeping its `deploy.php` declaration order.
+- For safety the prompts default to the typical production → staging flow: the source defaults to the first non-staging (production-like) host and the destination defaults to the first staging host (detected via the `stage` label or `staging` in the host alias/hostname), even when multiple production hosts are configured.
+- Requires confirmation before overwriting data on the destination.
+- **Database sync**: streams the database directly between endpoints by piping `mariadb-dump | gzip` from the source to `gunzip | mariadb` on the destination — no temporary files are written to disk. Remote endpoints are reached over SSH; the `local` endpoint reads credentials from the project-root `.env` and runs directly.
+- **File sync**: streams directories between endpoints by piping `tar` — no temporary files are written to disk. Local files live at the project root; remote files live under `{{deploy_path}}/shared`.
+- Restarts PHP-FPM and Supervisor on the destination after the sync completes — skipped when the destination is `local`.
+- Typical usage: sync production data to staging, or pull production data down to your local machine.
 
 **Example:**
 
@@ -115,7 +150,7 @@ Syncs the database and uploaded files from one remote host to another.
 dep lameco:sync
 ```
 
-The task will prompt to select the source and destination hosts from the configured list.
+The task will prompt to select the sync scope, source, and destination from `local` plus the configured hosts.
 
 ---
 
@@ -228,7 +263,41 @@ set('lameco_php_config', 'php-fpm-customuser.service');
 - Asset build and upload tasks expect a working Node.js/yarn setup and `.nvmrc` file.
 - `lameco:build_assets` expects nvm in `$NVM_DIR` (or `~/.nvm`) and uses `bash -lc` to load it.
 - Supervisor and PHP-FPM restarts are configurable and can be disabled per project.
-- For staging hosts, configure a deployment branch (or pass `--branch`) if `release/*` branches exist to avoid ambiguous deployments.
+- For staging hosts, configure a deployment branch (or pass `-o branch=<name>`) if `release/*` branches exist to avoid ambiguous deployments.
+
+## Upgrading from 1.x
+
+Version 2.0 switches all database CLI invocations from `mysql` / `mysqldump` to `mariadb` / `mariadb-dump`. This is a breaking change: the affected tasks (`lameco:db_download`, `lameco:db_upload`, `lameco:sync`, `lameco:deactivate`) will fail with `command not found` on any host where only the legacy MySQL client is installed.
+
+To upgrade:
+
+1. Install the MariaDB client package locally and on every remote host that runs the database tasks.
+   - On Debian/Ubuntu: `apt install mariadb-client`.
+   - On macOS via Homebrew: `brew install mariadb`.
+2. If you cannot install the MariaDB client on a given host, create symlinks as a stopgap:
+   ```bash
+   ln -s "$(command -v mysql)"     /usr/local/bin/mariadb
+   ln -s "$(command -v mysqldump)" /usr/local/bin/mariadb-dump
+   ```
+3. The `MYSQL_PWD` environment variable is still used for password handling — the MariaDB client honors it for backward compatibility, so no credential changes are required.
+4. The `lameco:db_open` task still builds a `mysql://` URL for Sequel Ace; that is a Sequel Ace URL scheme and is unaffected.
+
+## Contributing
+
+### Commit messages
+
+This repository uses [Conventional Commits](https://www.conventionalcommits.org/). Release tags, GitHub Releases and `CHANGELOG.md` are produced automatically by [release-please](https://github.com/googleapis/release-please) based on commit prefixes:
+
+| Prefix | Effect on next release |
+|---|---|
+| `feat:` | Minor bump (e.g. `1.4.0` → `1.5.0`), listed under **Features** in the changelog |
+| `fix:` | Patch bump (e.g. `1.4.0` → `1.4.1`), listed under **Bug Fixes** |
+| `feat!:` or any commit with a `BREAKING CHANGE:` footer | Major bump (e.g. `1.4.0` → `2.0.0`) |
+| `docs:`, `chore:`, `refactor:`, `style:`, `test:`, `ci:`, `build:` | No version bump, no changelog entry |
+
+Example: `feat: add lameco:db_open task to open remote DB in Sequel Ace via SSH tunnel`
+
+When release-please detects a releasable commit on `main`, it opens (or updates) a **"chore: release X.Y.Z"** PR. Merging that PR creates the git tag and a GitHub Release; Packagist auto-discovers the tag.
 
 ## License
 
