@@ -570,13 +570,14 @@ task('lameco:build_assets', function (): void {
         runLocally('bash -lc ' . escapeshellarg($nvmInit . ' && nvm install ' . $nodeVersionArg));
     }
 
-    if (nodeSupportsCorepack($nodeVersion)) {
-        writeln('Enabling Corepack...');
-        runLocally($runWithNvm('corepack enable'));
-    }
-
     $packageManager = resolvePackageManager();
     writeln('Using package manager: ' . $packageManager);
+
+    $setupCommand = packageManagerSetupCommand($packageManager, $nodeVersion);
+    if ($setupCommand !== null) {
+        writeln('Setting up ' . $packageManager . '...');
+        runLocally($runWithNvm($setupCommand));
+    }
 
     writeln('Installing dependencies...');
     runLocally($runWithNvm($packageManager . ' install'));
