@@ -186,6 +186,25 @@ function nodeSupportsCorepack(string $versionString): bool
 }
 
 /**
+ * The shell command that puts the project's pinned package manager on PATH, or null
+ * when the Node install already provides it.
+ *
+ * Only Yarn needs Corepack: the global Yarn is 1.x and ignores the pin. Node 25+ no
+ * longer bundles Corepack, so it is installed when missing. pnpm switches to its
+ * pinned version itself, and npm ships with Node.
+ */
+function packageManagerSetupCommand(string $packageManager, string $nodeVersion): ?string
+{
+    return match ($packageManager) {
+        'yarn' => nodeSupportsCorepack($nodeVersion)
+            ? '(command -v corepack >/dev/null || npm install -g corepack) && corepack enable'
+            : null,
+        'pnpm' => 'command -v pnpm >/dev/null || npm install -g pnpm',
+        default => null,
+    };
+}
+
+/**
  * Check if the given Composer package is present in composer.json (require or require-dev).
  *
  * @param string $package Composer package name.
@@ -403,7 +422,7 @@ function getCronMinute(): int
 
 /**
  * Resolves the package manager a project uses from its package.json
- * `packageManager` pin, which corepack already reads to pick the exact version.
+ * `packageManager` pin, which Corepack (Yarn) or pnpm itself reads to pick the exact version.
  *
  * Defaults to yarn so projects predating the pin keep deploying unchanged. An
  * unrecognised pin throws rather than falling back, because falling back to yarn
