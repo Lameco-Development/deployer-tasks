@@ -161,7 +161,7 @@ Builds local assets.
 - Loads Node.js version from `.nvmrc`.
 - Installs the correct Node.js version using nvm if not already installed.
 - Loads nvm in a non-interactive bash shell and runs each command with `nvm use`, so manual `nvm use` is not required.
-- Enables Corepack if supported by Node.js version (Node 14.19+, 16.9+, or >16).
+- Enables Corepack if supported by Node.js version (Node 14.19+, 16.9+, or >16), installing it with npm first on Node 25+, which no longer bundles it.
 - Installs dependencies with yarn.
 - Builds assets with yarn.
 - Appends any flags set in `lameco_assets_build_flags` to the yarn build command.

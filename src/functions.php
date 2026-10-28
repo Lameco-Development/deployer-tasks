@@ -186,6 +186,22 @@ function nodeSupportsCorepack(string $versionString): bool
 }
 
 /**
+ * Determine if the given Node.js version ships Corepack itself.
+ *
+ * Node.js 25 dropped the bundled Corepack; it has to be installed with npm.
+ *
+ * @param string $versionString Node.js version string (e.g. "v26.11.1").
+ * @return bool True if Corepack is bundled, false otherwise.
+ */
+function nodeBundlesCorepack(string $versionString): bool
+{
+    if (preg_match('/v?(\d+)\./', $versionString, $m)) {
+        return (int) $m[1] < 25;
+    }
+    return true;
+}
+
+/**
  * Check if the given Composer package is present in composer.json (require or require-dev).
  *
  * @param string $package Composer package name.

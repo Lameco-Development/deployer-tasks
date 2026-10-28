@@ -571,6 +571,13 @@ task('lameco:build_assets', function (): void {
     }
 
     if (nodeSupportsCorepack($nodeVersion)) {
+        if (! nodeBundlesCorepack($nodeVersion)) {
+            // Install into this nvm version: a corepack found elsewhere on PATH
+            // belongs to another Node and would put its shims in that version.
+            writeln('Installing Corepack (no longer bundled with Node.js 25+)...');
+            runLocally($runWithNvm('npm install -g corepack'));
+        }
+
         writeln('Enabling Corepack...');
         runLocally($runWithNvm('corepack enable'));
     }
