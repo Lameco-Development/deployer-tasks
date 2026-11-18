@@ -1,5 +1,12 @@
 # Changelog
 
+## [2.5.1](https://github.com/Lameco-Development/deployer-tasks/compare/2.5.0...2.5.1) (2026-11-18)
+
+
+### Bug Fixes
+
+* herstart php-fpm en supervisor voor het opruimen van releases ([#79](https://github.com/Lameco-Development/deployer-tasks/issues/79)) ([6e09904](https://github.com/Lameco-Development/deployer-tasks/commit/6e0990414f0f748e69441970a475eafc8f394fc6))
+
 ## [2.5.0](https://github.com/Lameco-Development/deployer-tasks/compare/2.4.0...2.5.0) (2026-11-18)
 
 
