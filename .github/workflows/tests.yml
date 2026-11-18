@@ -34,3 +34,6 @@ jobs:
 
       - name: prepare_current end-to-end
         run: bash tests/e2e/prepare-current.sh
+
+      - name: Task order end-to-end
+        run: bash tests/e2e/task-order.sh

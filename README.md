@@ -184,6 +184,9 @@ Restarts php-fpm service.
 
 - Restarts the service specified by `lameco_php_config` (default: `php-fpm-{{http_user}}.service`) on the remote server.
 - Skips if `lameco_restart_php` is false.
+- Draait direct na `deploy:symlink`, vóór `deploy:cleanup`. Tot de herstart lezen en schrijven de php-fpm-workers nog
+  in de vorige release (realpath-cache, opcache). Met één bewaarde release op staging liep het opruimen van die
+  release daardoor stuk op "Directory not empty".
 
 ---
 
@@ -193,6 +196,8 @@ Restarts supervisor.
 
 - Restarts each supervisor config in `lameco_supervisor_configs` using `supervisorctl`.
 - Skips if `lameco_restart_supervisor` is false.
+- Draait direct na `deploy:symlink`, vóór `deploy:cleanup`, om dezelfde reden als `lameco:restart_php`: de
+  queue-workers draaien tot de herstart vanuit de vorige release.
 
 ---
 
@@ -278,7 +283,7 @@ Ruimt de stub-release van `lameco:prepare_current` op.
 - `lameco:db_download`, `lameco:db_credentials`, `lameco:download`, and `lameco:upload` depend on `lameco:load`
 - `lameco:build_assets` runs before `deploy:symlink`
 - `lameco:upload_assets` runs after `lameco:build_assets`
-- `lameco:restart_php` and `lameco:restart_supervisor` run after `deploy:cleanup`
+- `lameco:restart_php` and `lameco:restart_supervisor` run after `deploy:symlink`, before `deploy:cleanup`
 - `crontab:sync` and `lameco:update_htpasswd` run after `deploy:success`
 
 ## Usage

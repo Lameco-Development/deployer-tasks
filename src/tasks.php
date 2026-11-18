@@ -982,8 +982,12 @@ before('deploy', 'lameco:verify_deploy_branch');
 before('deploy:symlink', 'lameco:build_assets');
 after('lameco:build_assets', 'lameco:upload_assets');
 
-after('deploy:cleanup', 'lameco:restart_php');
-after('deploy:cleanup', 'lameco:restart_supervisor');
+// Restart right after the switch, before deploy:cleanup removes the previous release. Until the restart, php-fpm
+// workers (realpath cache, opcache) and queue workers still resolve paths into the previous release and write to it
+// (license.key, logs), so with one release kept on staging `rm -rf` of that release failed with "Directory not
+// empty". A failed cleanup also skipped the restart, leaving the new release behind stale caches.
+after('deploy:symlink', 'lameco:restart_php');
+after('deploy:symlink', 'lameco:restart_supervisor');
 
 before('crontab:sync', 'lameco:ensure_cron_lock_dir');
 after('deploy:success', 'crontab:sync');
