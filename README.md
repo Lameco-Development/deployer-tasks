@@ -217,6 +217,41 @@ Updates .htpasswd file for staging environments.
 
 ---
 
+### lameco:deactivate
+
+Zet een staging-omgeving uit.
+
+- Alleen op staging-hosts, en pas na bevestiging.
+- Verwijdert de cronjobs, stopt Supervisor, wist de database (standaard ja) en de shared directories (standaard nee,
+  `.env` blijft altijd staan), verwijdert `current`, `releases` en `.dep` en herstart PHP-FPM.
+- Op `current` komt een gewone map met een placeholderpagina ("Staging niet actief").
+- Weer aanzetten: eerst `dep lameco:sync` (productie naar staging, database en bestanden), daarna een deploy.
+
+---
+
+### lameco:prepare_current
+
+Maakt `{{current_path}}` klaar voor de eerste deploy na `lameco:deactivate`.
+
+- Draait vóór `deploy:setup`, en doet niets als `{{current_path}}` een symlink is, zoals na elke gewone deploy.
+- Is `{{current_path}}` een gewone map met alleen de placeholder van `lameco:deactivate`, of een lege docroot, dan
+  verhuist de inhoud naar de stub-release `releases/{{lameco_stub_release}}` en wordt `{{current_path}}` een symlink
+  daarheen. Zonder deze stap stopt `deploy:setup` op die map. Weghalen helpt niet: het hostingpanel (Rootnet) maakt
+  een ontbrekende docroot vanzelf opnieuw aan.
+- Bezoekers zien de placeholder tot `deploy:symlink` naar de nieuwe release wisselt.
+- Staat er iets anders in de map, dan blijft die staan en stopt `deploy:setup` zoals voorheen.
+
+---
+
+### lameco:remove_stub_release
+
+Ruimt de stub-release van `lameco:prepare_current` op.
+
+- Draait na `deploy:symlink` en verwijdert `releases/{{lameco_stub_release}}` zodra `{{current_path}}` naar een
+  echte release wijst. Mislukt een deploy eerder, dan blijft de stub staan en ruimt de volgende deploy hem op.
+
+---
+
 ## Parameters
 
 - `lameco_project_type`: Project type (auto-detected: `symfony`, `kunstmaan`, `craftcms`, `laravel`)
@@ -231,12 +266,15 @@ Updates .htpasswd file for staging environments.
 - `lameco_php_config`: PHP-FPM systemd service name (default: `php-fpm-{{http_user}}.service`)
 - `lameco_restart_supervisor`: Enable/disable supervisor restart (default: true)
 - `lameco_supervisor_configs`: Supervisor config files (default: `[get('http_user') . '.conf']`)
+- `lameco_stub_release`: Map onder `releases/` voor de stub-release van `lameco:prepare_current` (standaard: `stub`)
 - `http_user`: User running PHP-FPM or supervisor
 
 ## Task Dependencies
 
 - `lameco:load` runs before `deploy`
 - `lameco:verify_deploy_branch` runs before `deploy`
+- `lameco:prepare_current` runs before `deploy:setup`
+- `lameco:remove_stub_release` runs after `deploy:symlink`
 - `lameco:db_download`, `lameco:db_credentials`, `lameco:download`, and `lameco:upload` depend on `lameco:load`
 - `lameco:build_assets` runs before `deploy:symlink`
 - `lameco:upload_assets` runs after `lameco:build_assets`

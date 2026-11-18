@@ -469,6 +469,32 @@ function localCheckoutProblem(string $branch, string $localSha, string $remoteSh
 }
 
 /**
+ * Classify a plain directory at {{current_path}}, where Deployer expects its symlink.
+ *
+ * `lameco:deactivate` leaves a directory that holds only its placeholder page, and a hosting panel can recreate
+ * an empty docroot (directories, no files) as soon as it disappears. Anything else is real content.
+ *
+ * @param string $files           Output of `find . -type f | head -n 2`, run inside {{current_path}}.
+ * @param string $placeholderFile The placeholder page as find prints it, e.g. `./web/index.html`.
+ * @param bool   $isPlaceholder   Whether that page holds the `lameco:deactivate` placeholder.
+ * @return string `placeholder`, `empty` or `other`.
+ */
+function classifyCurrentDirectory(string $files, string $placeholderFile, bool $isPlaceholder): string
+{
+    $files = trim($files);
+
+    if ($files === '') {
+        return 'empty';
+    }
+
+    if ($files === $placeholderFile && $isPlaceholder) {
+        return 'placeholder';
+    }
+
+    return 'other';
+}
+
+/**
  * Whether Deployer runs inside GitHub Actions, where the workflow checks out the exact commit itself.
  */
 function runsInCi(): bool
