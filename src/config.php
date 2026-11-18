@@ -106,6 +106,10 @@ set('lameco_assets_dirs', ['{{lameco_public_dir}}/dist']);
 set('lameco_assets_files', []);
 set('lameco_assets_build_flags', '');
 
+// Directory under releases/ that lameco:prepare_current points {{current_path}} at before the first deploy after
+// lameco:deactivate. lameco:remove_stub_release removes it once a real release is live.
+set('lameco_stub_release', 'stub');
+
 set('lameco_restart_supervisor', true);
 set('lameco_supervisor_configs', ['{{http_user}}.conf']);
 

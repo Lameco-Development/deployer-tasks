@@ -924,8 +924,58 @@ task('lameco:deactivate', function (): void {
 
     writeln('');
     writeln('✔ Staging omgeving is gedeactiveerd.');
-    writeln('  Voer een deploy uit om de omgeving weer te activeren.');
+    writeln('  Weer activeren: dep lameco:sync (productie naar staging, database en bestanden), daarna een deploy.');
 });
+
+// The first deploy after lameco:deactivate finds a plain directory at {{current_path}}, where Deployer expects its
+// symlink: the placeholder page, or an empty docroot that the hosting panel puts back as soon as that directory is
+// removed. deploy:setup stops on such a directory, and removing it by hand does not help while the panel recreates
+// it. Its contents move into a stub release instead, so visitors keep seeing the placeholder until deploy:symlink
+// switches to the new release.
+desc('Prepare current_path for the first deploy after lameco:deactivate');
+task('lameco:prepare_current', function (): void {
+    if (! test('[ -d {{current_path}} ] && [ ! -L {{current_path}} ]')) {
+        return;
+    }
+
+    $placeholderFile = get('lameco_public_dir') . '/index.html';
+    $state = classifyCurrentDirectory(
+        run('cd {{current_path}} && find . -type f | head -n 2'),
+        './' . $placeholderFile,
+        // The <title> of the page that lameco:deactivate writes.
+        test('grep -qs ' . escapeshellarg('Staging niet actief') . ' {{current_path}}/' . escapeshellarg($placeholderFile)),
+    );
+
+    if ($state === 'other') {
+        // Real content: leave it to deploy:setup, which stops and explains.
+        return;
+    }
+
+    writeln($state === 'placeholder'
+        ? 'Moving the lameco:deactivate placeholder at {{current_path}} into a stub release.'
+        : 'Moving the empty docroot at {{current_path}} into a stub release.');
+
+    $stub = escapeshellarg('releases/' . get('lameco_stub_release'));
+    // {{current_path}} is missing only between the rm and the ln, too short for the panel to recreate it.
+    run(
+        'cd {{deploy_path}} && rm -rf ' . $stub . ' && mkdir -p ' . $stub . ' && cp -a {{current_path}}/. ' . $stub
+        . ' && rm -rf {{current_path}} && ln -s ' . $stub . ' {{current_path}}',
+    );
+});
+
+desc('Remove the stub release once a real release is live');
+task('lameco:remove_stub_release', function (): void {
+    $stub = escapeshellarg('releases/' . get('lameco_stub_release'));
+
+    // Kept while {{current_path}} still resolves to it.
+    run(
+        'cd {{deploy_path}} && if [ -d ' . $stub . ' ] && ! [ {{current_path}} -ef ' . $stub . ' ]; then rm -rf '
+        . $stub . '; fi',
+    );
+});
+
+before('deploy:setup', 'lameco:prepare_current');
+after('deploy:symlink', 'lameco:remove_stub_release');
 
 before('deploy', 'lameco:verify_deploy_branch');
 
