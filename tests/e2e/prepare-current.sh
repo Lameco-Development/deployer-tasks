@@ -44,7 +44,9 @@ namespace Deployer;
 require 'recipe/common.php';
 require '$root/src/tasks.php';
 foreach (['placeholder', 'docroot', 'content'] as \$name) {
-    localhost(\$name)->set('deploy_path', '$tmp/' . \$name)->set('branch', 'development');
+    // These directories have no php-fpm or supervisor to restart after deploy:symlink.
+    localhost(\$name)->set('deploy_path', '$tmp/' . \$name)->set('branch', 'development')
+        ->set('lameco_restart_php', false)->set('lameco_restart_supervisor', false);
 }
 // Nothing to build here; the hooks around deploy:symlink stay in place.
 task('lameco:build_assets', function () {});
