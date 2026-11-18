@@ -1,5 +1,12 @@
 # Changelog
 
+## [2.5.0](https://github.com/Lameco-Development/deployer-tasks/compare/2.4.0...2.5.0) (2026-11-18)
+
+
+### Features
+
+* eerste deploy na lameco:deactivate loopt niet meer vast ([#76](https://github.com/Lameco-Development/deployer-tasks/issues/76)) ([194f93d](https://github.com/Lameco-Development/deployer-tasks/commit/194f93d086f46eecddafd6cebef725001e7c6b9a))
+
 ## [2.4.0](https://github.com/Lameco-Development/deployer-tasks/compare/2.3.0...2.4.0) (2026-09-25)
 
 
