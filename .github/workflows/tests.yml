@@ -31,3 +31,6 @@ jobs:
 
       - name: verify_deploy_branch end-to-end
         run: bash tests/e2e/verify-deploy-branch.sh
+
+      - name: prepare_current end-to-end
+        run: bash tests/e2e/prepare-current.sh
