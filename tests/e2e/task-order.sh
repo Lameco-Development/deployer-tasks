@@ -41,6 +41,7 @@ before "php-fpm restarts before the previous release is removed" lameco:restart_
 before "supervisor restarts after the switch" deploy:symlink lameco:restart_supervisor
 before "supervisor restarts before the previous release is removed" lameco:restart_supervisor deploy:cleanup
 before "current_path is prepared before deploy:setup" lameco:prepare_current deploy:setup
+before "Craft backups are zipped after the switch" deploy:symlink lameco:craft_backups
 
 if [ "$failed" -ne 0 ]; then
   printf '%s\n' "$tree"

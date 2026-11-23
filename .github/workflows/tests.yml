@@ -37,3 +37,6 @@ jobs:
 
       - name: Task order end-to-end
         run: bash tests/e2e/task-order.sh
+
+      - name: craft_backups end-to-end
+        run: bash tests/e2e/craft-backups.sh

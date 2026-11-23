@@ -14,6 +14,16 @@ set('keep_releases', fn () => isStaging()
     ? get('lameco_keep_releases_staging')
     : get('lameco_keep_releases_default'));
 
+// Craft writes an uncompressed dump before every deploy that runs migrations and only prunes at its maxBackups
+// (default 20), which filled the shared servers. These backups are for undoing the last migration; the hosting
+// keeps its own daily backups.
+set('lameco_craft_backups_path', '{{deploy_path}}/shared/storage/backups');
+set('lameco_craft_backups_keep_staging', 1);
+set('lameco_craft_backups_keep_default', 2);
+set('lameco_craft_backups_keep', fn () => isStaging()
+    ? get('lameco_craft_backups_keep_staging')
+    : get('lameco_craft_backups_keep_default'));
+
 $sharedDirs = get('shared_dirs');
 set('shared_dirs', function () use ($sharedDirs) {
     $dirs = $sharedDirs;

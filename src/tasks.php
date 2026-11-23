@@ -629,6 +629,46 @@ task('lameco:upload_assets', function (): void {
     }
 });
 
+// Zip Craft's database backups and keep the newest N.
+desc("Zip Craft's database backups and keep the newest N");
+task('lameco:craft_backups', function (): void {
+    $keep = (int) get('lameco_craft_backups_keep');
+    if ($keep < 1) {
+        writeln('lameco_craft_backups_keep is ' . $keep . '; leaving the Craft backups alone.');
+        return;
+    }
+
+    $path = parse((string) get('lameco_craft_backups_path'));
+    if (! test('[ -d ' . escapeshellarg($path) . ' ]')) {
+        writeln('No Craft backups at ' . $path . '.');
+        return;
+    }
+
+    within($path, function () use ($keep): void {
+        // Prune before zipping, so a dump about to go is not compressed first. ls exits non-zero when one of the
+        // two globs matches nothing, while still listing the other.
+        run('{ ls -1t -- *.sql *.sql.zip 2>/dev/null || true; } | tail -n +' . ($keep + 1)
+            . ' | while IFS= read -r file; do rm -f -- "$file"; done');
+
+        if (! test('command -v zip >/dev/null 2>&1')) {
+            warning('zip is not installed, so the Craft backups stay uncompressed.');
+            return;
+        }
+
+        // Zip rather than gzip: `craft db/restore` and Craft's own maxBackups pruning recognise .sql.zip. Both, and
+        // the pruning above, go by modification time, so the zip takes over the time of the dump it replaces.
+        // The release is already live here, so a dump that fails to zip (a full disk) is reported, not thrown: a
+        // throw would mark the deploy failed and run its deploy:failed hooks. A 1.6 GB dump takes minutes to zip.
+        run('for file in *.sql; do [ -f "$file" ] || continue; '
+            . '{ zip -q -j "$file.zip" "$file" && touch -r "$file" "$file.zip" && rm -f -- "$file"; } '
+            . '|| rm -f -- "$file.zip"; done; true', timeout: 1800);
+
+        if (test('ls -- *.sql >/dev/null 2>&1')) {
+            warning('Some Craft backups could not be zipped and stay uncompressed in ' . get('lameco_craft_backups_path') . '.');
+        }
+    });
+});
+
 // Restart php-fpm service.
 desc('Restart php-fpm service');
 task('lameco:restart_php', function (): void {
@@ -995,4 +1035,10 @@ after('deploy:success', 'lameco:update_htpasswd');
 
 if (in_array(get('lameco_project_type'), ['symfony', 'kunstmaan'], true)) {
     before('deploy:symlink', 'database:migrate');
+}
+
+// After the switch rather than right after craft:migrate/all, so zipping a large dump does not delay the release, and
+// so the hook does not depend on the project loading recipe/craftcms.php before these tasks.
+if (get('lameco_project_type') === 'craftcms') {
+    after('deploy:symlink', 'lameco:craft_backups');
 }

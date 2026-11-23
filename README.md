@@ -257,6 +257,21 @@ Ruimt de stub-release van `lameco:prepare_current` op.
 
 ---
 
+### lameco:craft_backups
+
+Zips Craft's database backups and keeps the newest few. Craft CMS projects only.
+
+- Craft writes an uncompressed dump to `storage/backups` before every deploy that runs migrations, and only prunes
+  at its `maxBackups` (default 20). On a shared server that adds up to gigabytes per project.
+- Keeps the newest `lameco_craft_backups_keep` backups (`.sql` and `.sql.zip`, by modification time) and removes the
+  rest, then zips each remaining `.sql` into `.sql.zip` with the dump's modification time. `craft db/restore` reads
+  the zip directly.
+- Leaves the dumps uncompressed, with a warning, when `zip` is not installed on the server.
+- Runs after `deploy:symlink`, so zipping a large dump does not delay the release. The first deploy with this task
+  also cleans up the backups that piled up before it.
+
+---
+
 ## Parameters
 
 - `lameco_project_type`: Project type (auto-detected: `symfony`, `kunstmaan`, `craftcms`, `laravel`)
@@ -272,6 +287,8 @@ Ruimt de stub-release van `lameco:prepare_current` op.
 - `lameco_restart_supervisor`: Enable/disable supervisor restart (default: true)
 - `lameco_supervisor_configs`: Supervisor config files (default: `[get('http_user') . '.conf']`)
 - `lameco_stub_release`: Map onder `releases/` voor de stub-release van `lameco:prepare_current` (standaard: `stub`)
+- `lameco_craft_backups_keep`: Craft backups to keep (default: `lameco_craft_backups_keep_default` = 2, or `lameco_craft_backups_keep_staging` = 1 on staging hosts; below 1 leaves the backups alone)
+- `lameco_craft_backups_path`: Craft's backup directory (default: `{{deploy_path}}/shared/storage/backups`)
 - `http_user`: User running PHP-FPM or supervisor
 
 ## Task Dependencies
@@ -284,6 +301,7 @@ Ruimt de stub-release van `lameco:prepare_current` op.
 - `lameco:build_assets` runs before `deploy:symlink`
 - `lameco:upload_assets` runs after `lameco:build_assets`
 - `lameco:restart_php` and `lameco:restart_supervisor` run after `deploy:symlink`, before `deploy:cleanup`
+- `lameco:craft_backups` runs after `deploy:symlink` (Craft CMS projects)
 - `crontab:sync` and `lameco:update_htpasswd` run after `deploy:success`
 
 ## Usage
